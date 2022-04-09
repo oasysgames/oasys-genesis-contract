@@ -1,0 +1,136 @@
+// SPDX-License-Identifier: GPL-3.0
+
+pragma solidity ^0.8.0;
+
+import { IEnvironment } from "../IEnvironment.sol";
+
+library Constants {
+    uint256 public constant REWARD_PRECISION = 25;
+    uint256 public constant SECONDS_PER_YEAR = 60 * 60 * 24 * 365;
+    uint256 public constant MAX_REWARD_RATE = 100;
+    uint256 public constant MAX_COMMISSION_RATE = 100;
+}
+
+library MathLib {
+    function percent(
+        uint256 numerator,
+        uint256 denominator,
+        uint256 precision
+    ) internal pure returns (uint256) {
+        uint256 numerator_ = numerator * 10**(precision + 1);
+        return ((numerator_ / denominator) + 5) / 10;
+    }
+
+    function share(
+        uint256 principal,
+        uint256 numerator,
+        uint256 denominator,
+        uint256 precision
+    ) internal pure returns (uint256) {
+        return (principal * percent(numerator, denominator, precision)) / (10**precision);
+    }
+}
+
+library UpdateHistoriesLib {
+    function set(
+        uint256[] storage epochs,
+        uint256[] storage values,
+        uint256 nextEpoch,
+        uint256 value
+    ) internal {
+        extend(epochs, values, nextEpoch);
+        values[epochs.length - 1] = value;
+    }
+
+    function add(
+        uint256[] storage epochs,
+        uint256[] storage values,
+        uint256 nextEpoch,
+        uint256 value
+    ) internal {
+        extend(epochs, values, nextEpoch);
+        values[epochs.length - 1] += value;
+    }
+
+    function sub(
+        uint256[] storage epochs,
+        uint256[] storage values,
+        uint256 nextEpoch,
+        uint256 value
+    ) internal returns (uint256) {
+        extend(epochs, values, nextEpoch);
+
+        uint256 balance = values[epochs.length - 1];
+        value = value <= balance ? value : balance;
+        if (value > 0) {
+            values[epochs.length - 1] -= value;
+        }
+        return value;
+    }
+
+    function find(
+        uint256[] storage epochs,
+        uint256[] storage values,
+        uint256 epoch
+    ) internal view returns (uint256) {
+        if (epochs.length == 0 || epochs[0] > epoch) return 0;
+        if (epochs[epochs.length - 1] <= epoch) return values[epochs.length - 1];
+        uint256 idx = sBinarySearch(epochs, epoch, 0, epochs.length);
+        return values[idx];
+    }
+
+    function find(
+        uint256[] memory epochs,
+        IEnvironment.Environment[] memory values,
+        uint256 epoch
+    ) internal pure returns (IEnvironment.Environment memory) {
+        if (epochs[epochs.length - 1] <= epoch) return values[epochs.length - 1];
+        uint256 idx = mBinarySearch(epochs, epoch, 0, epochs.length);
+        return values[idx];
+    }
+
+    function extend(
+        uint256[] storage epochs,
+        uint256[] storage values,
+        uint256 nextEpoch
+    ) internal {
+        uint256 length = epochs.length;
+        if (length == 0) {
+            epochs.push(nextEpoch);
+            values.push();
+            return;
+        }
+
+        uint256 lastEpoch = epochs[length - 1];
+        if (lastEpoch != nextEpoch) {
+            epochs.push(nextEpoch);
+            values.push(values[length - 1]);
+        }
+    }
+
+    function sBinarySearch(
+        uint256[] storage epochs,
+        uint256 epoch,
+        uint256 head,
+        uint256 tail
+    ) internal view returns (uint256) {
+        if (head == tail) return tail - 1;
+        uint256 center = (head + tail) / 2;
+        if (epochs[center] > epoch) return sBinarySearch(epochs, epoch, head, center);
+        if (epochs[center] < epoch) return sBinarySearch(epochs, epoch, center + 1, tail);
+        return center;
+    }
+
+    function mBinarySearch(
+        uint256[] memory epochs,
+        uint256 epoch,
+        uint256 head,
+        uint256 tail
+    ) internal pure returns (uint256) {
+        if (head == tail) return tail - 1;
+        uint256 center = (head + tail) / 2;
+        if (epochs[center] > epoch) return mBinarySearch(epochs, epoch, head, center);
+        if (epochs[center] < epoch) return mBinarySearch(epochs, epoch, center + 1, tail);
+        return center;
+    }
+}
