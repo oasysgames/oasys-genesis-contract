@@ -1,0 +1,63 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "Constants",
+  "sourceName": "contracts/lib/Common.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "MAX_COMMISSION_RATE",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_REWARD_RATE",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "REWARD_PRECISION",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SECONDS_PER_YEAR",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x60b6610039600b82828239805160001a60731461002c57634e487b7160e01b600052600060045260246000fd5b30600052607381538281f3fe730000000000000000000000000000000000000000301460806040526004361060515760003560e01c8063207239c01460565780633d6aa5e114606f578063718dc3c3146056578063e6a69ab8146076575b600080fd5b605d606481565b60405190815260200160405180910390f35b605d601981565b605d6301e133808156fea26469706673582212204785e4c854466ed8afe5a4c6627042a9f4fdcdd7bebecd3764772429759ea14664736f6c63430008090033",
+  "deployedBytecode": "0x730000000000000000000000000000000000000000301460806040526004361060515760003560e01c8063207239c01460565780633d6aa5e114606f578063718dc3c3146056578063e6a69ab8146076575b600080fd5b605d606481565b60405190815260200160405180910390f35b605d601981565b605d6301e133808156fea26469706673582212204785e4c854466ed8afe5a4c6627042a9f4fdcdd7bebecd3764772429759ea14664736f6c63430008090033",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
