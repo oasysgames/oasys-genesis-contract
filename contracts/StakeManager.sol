@@ -3,12 +3,19 @@
 pragma solidity ^0.8.0;
 
 import { System } from "./System.sol";
-import { Constants, UpdateHistoriesLib } from "./lib/Common.sol";
-import { IEnvironment } from "./IEnvironment.sol";
-import { IStakeManager, ValidatorLib, StakerLib } from "./IStakeManager.sol";
+import { Environment } from "./Environment.sol";
+import { Constants } from "./lib/Constants.sol";
+import { UpdateHistories } from "./lib/UpdateHistories.sol";
+import { Validator as ValidatorLib } from "./lib/Validator.sol";
+import { Staker as StakerLib } from "./lib/Staker.sol";
 
-contract StakeManager is System, IStakeManager {
-    using UpdateHistoriesLib for uint256[];
+/**
+ * @title StakeManager
+ * @dev The StakeManager contract is the core contract of the proof-of-stake.
+ *
+ */
+contract StakeManager is System {
+    using UpdateHistories for uint256[];
     using ValidatorLib for Validator;
     using StakerLib for Staker;
 
@@ -24,11 +31,60 @@ contract StakeManager is System, IStakeManager {
     event Staked(address indexed staker, address indexed validator, uint256 amount);
     event Unstaked(address indexed staker, address indexed validator, uint256 amount);
 
+    /***********
+     * Structs *
+     ***********/
+
+    struct Validator {
+        // Validator address
+        address owner;
+        // Address used for block signing
+        address operator;
+        // Validator status
+        bool active;
+        // Epoch number at which the validator was jailed
+        uint256 jailEpoch;
+        // Commission rate last updated epoch
+        uint256[] lastCommissionUpdates;
+        // Commission rates per epoch
+        uint256[] commissionRates;
+        // Stake last updated epoch
+        uint256[] stakeUpdates;
+        // Stake amounts per epoch
+        uint256[] stakeAmounts;
+        // Epoch of last claimed of commissions
+        uint256 lastClaimCommission;
+        // List of stakers
+        address[] stakers;
+        mapping(address => bool) stakerExists;
+        // List of epochs joined in creation of block
+        uint256[] epochs;
+        // Expected number of block createds per epoch
+        mapping(uint256 => uint256) blocks;
+        // Number of slashes per epoch
+        mapping(uint256 => uint256) slashes;
+    }
+
+    struct Staker {
+        // Staker address
+        address signer;
+        // Stake last updated epoch
+        mapping(address => uint256[]) stakeUpdates;
+        // Stake amounts per epoch
+        mapping(address => uint256[]) stakeAmounts;
+        // Last epoch to withdrawl unstake
+        uint256[] unstakeUpdates;
+        // Unstake amounts per epoch
+        uint256[] unstakeAmounts;
+        // Epoch of last claimed of rewards per validator
+        mapping(address => uint256) lastClaimReward;
+    }
+
     /*************
      * Constants *
      *************/
 
-    IEnvironment public environment;
+    Environment public environment;
 
     /*************
      * Variables *
@@ -51,16 +107,27 @@ contract StakeManager is System, IStakeManager {
      * Modifiers *
      *************/
 
+    /**
+     * Modifier requiring the validator to be registered.
+     * @param validator Validator address.
+     */
     modifier validatorExists(address validator) {
         require(validators[validator].owner != address(0), "validator does not exist.");
         _;
     }
 
+    /**
+     * Modifier requiring the sender to be a registered staker.
+     */
     modifier stakerExists() {
         require(stakers[msg.sender].signer != address(0), "staker does not exist.");
         _;
     }
 
+    /**
+     * Modifier requiring the sender to be a owner or operator of the validator.
+     * @param validator Validator address.
+     */
     modifier onlyValidatorOwnerOrOperator(address validator) {
         require(
             msg.sender == validators[validator].owner || msg.sender == validators[validator].operator,
@@ -69,18 +136,27 @@ contract StakeManager is System, IStakeManager {
         _;
     }
 
+    /**
+     * Modifier requiring the current block to be the first block of the epoch.
+     */
     modifier onlyFirstBlock() {
         // solhint-disable-next-line reason-string
         require(environment.isFirstBlock(), "only executable in the first block of epoch.");
         _;
     }
 
+    /**
+     * Modifier requiring the current block to be the last block of the epoch.
+     */
     modifier onlyLastBlock() {
         // solhint-disable-next-line reason-string
         require(environment.isLastBlock(), "only executable in the last block of epoch.");
         _;
     }
 
+    /**
+     * Modifier requiring the current block not to be the last block of the epoch.
+     */
     modifier onlyNotLastBlock() {
         // solhint-disable-next-line reason-string
         require(!environment.isLastBlock(), "not executable in the last block of epoch.");
@@ -91,10 +167,19 @@ contract StakeManager is System, IStakeManager {
      * Functions for Validators *
      ****************************/
 
-    function initialize(IEnvironment _environment) external onlyCoinbase initializer {
+    /**
+     * Initialization of contract.
+     * This method is called by the genesis validator in the first epoch.
+     * @param _environment Address of the Environment contract.
+     */
+    function initialize(Environment _environment) external onlyCoinbase initializer {
         environment = _environment;
     }
 
+    /**
+     * Record validators that failed to create blocks.
+     * @param operator Validator address.
+     */
     function slash(address operator) external validatorExists(operatorToOwner[operator]) onlyCoinbase {
         // solhint-disable-next-line reason-string
         require(environment.epoch() > 1, "not executable in the first epoch.");
@@ -104,6 +189,12 @@ contract StakeManager is System, IStakeManager {
         emit ValidatorSlashed(validator.owner);
     }
 
+    /**
+     * Stores the number of blocks per validator should create at the current epoch.
+     * The value is calculated by the validator that creates the first block of the epoch.
+     * @param operators List of validator address.
+     * @param counts List of blocks per validator.
+     */
     function updateValidatorBlocks(address[] memory operators, uint256[] memory counts)
         external
         onlyFirstBlock
@@ -118,11 +209,15 @@ contract StakeManager is System, IStakeManager {
         require(total == environment.value().epochPeriod, "block count is mismatch.");
     }
 
+    /**
+     * Select a validators for the next epoch based on current staking amounts and availability.
+     * This method is called only once in the last block of the epoch.
+     */
     function updateValidators() external onlyLastBlock onlyCoinbase {
         uint256 epoch = environment.epoch();
         require(validatorUpdates[epoch] == address(0), "already updated.");
 
-        IEnvironment.Environment memory env = environment.value();
+        Environment.EnvironmentValue memory env = environment.value();
 
         // Jailed validators
         for (uint256 i = 0; i < currentValidators.length; i++) {
@@ -156,17 +251,30 @@ contract StakeManager is System, IStakeManager {
      * Functions for Validator owner or operator *
      *********************************************/
 
+    /**
+     * Join as a validator in the proof-of-stake.
+     * @param operator Address used for block signing.
+     */
     function joinValidator(address operator) external {
         validators[msg.sender].join(operator);
         validatorOwners.push(msg.sender);
         operatorToOwner[operator] = msg.sender;
     }
 
+    /**
+     * Update the block signing address.
+     * @param operator New address used for block signing.
+     */
     function updateOperator(address operator) public validatorExists(msg.sender) {
         validators[msg.sender].updateOperator(operator);
         operatorToOwner[operator] = msg.sender;
     }
 
+    /**
+     * Change the validator status to active.
+     * Changes will be applied from next epoch.
+     * @param validator Validator address.
+     */
     function activateValidator(address validator)
         external
         onlyValidatorOwnerOrOperator(validator)
@@ -176,6 +284,11 @@ contract StakeManager is System, IStakeManager {
         emit ValidatorActivated(validator);
     }
 
+    /**
+     * Change the validator status to disable.
+     * Changes will be applied from next epoch.
+     * @param validator Validator address.
+     */
     function deactivateValidator(address validator)
         external
         onlyValidatorOwnerOrOperator(validator)
@@ -185,11 +298,24 @@ contract StakeManager is System, IStakeManager {
         emit ValidatorDeactivated(validator);
     }
 
+    /**
+     * Update validator commission rates.
+     * Changes will be applied from next epoch.
+     * @param newRate New commission rates(0%~100%).
+     */
     function updateCommissionRate(uint256 newRate) external validatorExists(msg.sender) {
         validators[msg.sender].updateCommissionRate(environment, newRate);
         emit ValidatorCommissionRateUpdated(msg.sender, newRate);
     }
 
+    /**
+     * Withdraw validator commissions.
+     * Both owner and operator can be executed, but the remittance destination will be owner address.
+     * @param validator Validator address.
+     * @param epochs Number of epochs to be withdrawn.
+     *     If zero is specified, all commissions from the last withdrawal to the present will be withdrawn.
+     *     If the gas limit is reached, specify a smaller value.
+     */
     function claimCommissions(address validator, uint256 epochs)
         external
         onlyValidatorOwnerOrOperator(validator)
@@ -202,6 +328,11 @@ contract StakeManager is System, IStakeManager {
      * Functions for Staker *
      ************************/
 
+    /**
+     * Stake tokens to validator.
+     * The stakes will be effective from next epoch, so there is no reward in the current epoch.
+     * @param validator Validator address.
+     */
     function stake(address validator) external payable validatorExists(validator) onlyNotLastBlock {
         require(msg.value > 0, "amount is zero.");
 
@@ -214,6 +345,12 @@ contract StakeManager is System, IStakeManager {
         emit Staked(msg.sender, validator, msg.value);
     }
 
+    /**
+     * Unstake tokens from validator.
+     * The stake will be locked until the end of the current epoch, but will be rewarded.
+     * @param validator Validator address.
+     * @param amount Unstake amounts.
+     */
     function unstake(address validator, uint256 amount)
         external
         validatorExists(validator)
@@ -226,10 +363,20 @@ contract StakeManager is System, IStakeManager {
         emit Unstaked(msg.sender, validator, amount);
     }
 
+    /**
+     * Withdraw staking rewards.
+     * @param validator Validator address.
+     * @param epochs Number of epochs to be withdrawn.
+     *     If zero is specified, all rewards from the last withdrawal to the present will be withdrawn.
+     *     If the gas limit is reached, specify a smaller value.
+     */
     function claimRewards(address validator, uint256 epochs) external validatorExists(validator) stakerExists {
         stakers[msg.sender].claimRewards(environment, validators[validator], epochs);
     }
 
+    /**
+     * Withdraw unstaked tokens whose lock period has expired.
+     */
     function claimUnstakes() external stakerExists {
         stakers[msg.sender].claimUnstakes(environment);
     }
@@ -238,10 +385,15 @@ contract StakeManager is System, IStakeManager {
      * View Functions *
      ******************/
 
+    /**
+     * Returns validators who create blocks in the current epoch.
+     * @return owners List of addresses for block signing.
+     * @return operators List of validator owner addresses.
+     * @return stakes List of total staked amounts for each validator.
+     */
     function getCurrentValidators()
         external
         view
-        override
         returns (
             address[] memory owners,
             address[] memory operators,
@@ -262,10 +414,20 @@ contract StakeManager is System, IStakeManager {
         }
     }
 
+    /**
+     * Returns addresses of all validators.
+     * @return List of validator address.
+     */
     function getValidators() external view returns (address[] memory) {
         return validatorOwners;
     }
 
+    /**
+     * Returns staker addresses with pagination.
+     * @param page Number of page.
+     * @param perPage Number of addresses per page.
+     * @return List of staker address.
+     */
     function getStakers(uint256 page, uint256 perPage) external view returns (address[] memory) {
         page = page > 0 ? page : 1;
         perPage = perPage > 0 ? perPage : 50;
@@ -283,6 +445,15 @@ contract StakeManager is System, IStakeManager {
         return _stakers;
     }
 
+    /**
+     * Returns validator information.
+     * @param validator Validator address.
+     * @return operator Address used for block signing
+     * @return active Validator status.
+     * @return stakes Total staked amounts.
+     * @return commissionRate Commission rates.
+     * @return jailEpoch Last jailed epoch number.
+     */
     function getValidatorInfo(address validator)
         external
         view
@@ -304,15 +475,38 @@ contract StakeManager is System, IStakeManager {
         );
     }
 
+    /**
+     * Returns staker information.
+     * @param staker Staker address.
+     * @return stakes Total staked amounts.
+     * @return unstakes Total unstaked amounts.
+     */
     function getStakerInfo(address staker) public view returns (uint256 stakes, uint256 unstakes) {
         Staker storage _staker = stakers[staker];
         return (_staker.getTotalStake(validatorOwners, environment.epoch()), _staker.getUnstakes(environment));
     }
 
+    /**
+     * Returns the balance of validator commissions.
+     * @param validator Validator address.
+     * @param epochs Number of epochs to be calculated.
+     *     If zero is specified, all balances from the last withdrawal to the present will be calculated.
+     *     If the gas limit is reached, specify a smaller value.
+     * @return commissions Commission balance.
+     */
     function getCommissions(address validator, uint256 epochs) external view returns (uint256 commissions) {
         (commissions, ) = validators[validator].getCommissions(environment, epochs);
     }
 
+    /**
+     * Returns the balance of staking rewards.
+     * @param staker Staker address.
+     * @param validator Validator address.
+     * @param epochs Number of epochs to be calculated.
+     *     If zero is specified, all balances from the last withdrawal to the present will be calculated.
+     *     If the gas limit is reached, specify a smaller value.
+     * @return rewards Reward balance.
+     */
     function getRewards(
         address staker,
         address validator,
@@ -321,18 +515,32 @@ contract StakeManager is System, IStakeManager {
         (rewards, ) = stakers[staker].getRewards(environment, validators[validator], epochs);
     }
 
+    /**
+     * Returns the total staking rewards for a given epoch period.
+     * @param epochs Number of epochs to be calculated.
+     * @return rewards Total staking rewards.
+     */
     function getTotalRewards(uint256 epochs) external view returns (uint256 rewards) {
         uint256 epoch = environment.epoch() - epochs - 1;
-        (uint256[] memory envUpdates, IEnvironment.Environment[] memory envValues) = environment.epochAndValues();
+        (uint256[] memory envUpdates, Environment.EnvironmentValue[] memory envValues) = environment.epochAndValues();
         for (uint256 i = 0; i < epochs; i++) {
             epoch += 1;
-            IEnvironment.Environment memory env = envUpdates.find(envValues, epoch);
+            Environment.EnvironmentValue memory env = envUpdates.find(envValues, epoch);
             for (uint256 j = 0; j < validatorOwners.length; j++) {
                 rewards += validators[validatorOwners[j]].getRewards(env, epoch);
             }
         }
     }
 
+    /**
+     * Returns a list of stakers and amounts to the validator.
+     * @param validator Validator address.
+     * @param epoch Target epoch number.
+     * @param page Number of page.
+     * @param perPage Number of addresses per page.
+     * @return _stakers List of staker address.
+     * @return stakes List of staked amounts for each staker.
+     */
     function getValidatorStakes(
         address validator,
         uint256 epoch,
@@ -359,6 +567,15 @@ contract StakeManager is System, IStakeManager {
         }
     }
 
+    /**
+     * Returns a list of staking from Staker to a validator.
+     * @param staker Staker address.
+     * @param epoch Target epoch number.
+     * @return _validators List of validator address.
+     * @return stakes List of staked amounts for each staker.
+     * @return stakeRequests List of stake amounts to be added in the next epoch.
+     * @return unstakeRequests List of stake amounts to be reduced in the next epoch.
+     */
     function getStakerStakes(address staker, uint256 epoch)
         external
         view
@@ -376,6 +593,13 @@ contract StakeManager is System, IStakeManager {
         );
     }
 
+    /**
+     * Returns the number of blocks the validator should create and the number of failed blocks.
+     * @param validator Validator address.
+     * @param epoch Target epoch number.
+     * @return blocks Number of blocks to be created.
+     * @return slashes Number of failed blocks.
+     */
     function getBlockAndSlashes(address validator, uint256 epoch)
         public
         view

@@ -2,36 +2,12 @@
 
 pragma solidity ^0.8.0;
 
-import { IEnvironment } from "../IEnvironment.sol";
+import { Environment } from "../Environment.sol";
 
-library Constants {
-    uint256 public constant REWARD_PRECISION = 25;
-    uint256 public constant SECONDS_PER_YEAR = 60 * 60 * 24 * 365;
-    uint256 public constant MAX_REWARD_RATE = 100;
-    uint256 public constant MAX_COMMISSION_RATE = 100;
-}
-
-library MathLib {
-    function percent(
-        uint256 numerator,
-        uint256 denominator,
-        uint256 precision
-    ) internal pure returns (uint256) {
-        uint256 numerator_ = numerator * 10**(precision + 1);
-        return ((numerator_ / denominator) + 5) / 10;
-    }
-
-    function share(
-        uint256 principal,
-        uint256 numerator,
-        uint256 denominator,
-        uint256 precision
-    ) internal pure returns (uint256) {
-        return (principal * percent(numerator, denominator, precision)) / (10**precision);
-    }
-}
-
-library UpdateHistoriesLib {
+/**
+ * @title UpdateHistories
+ */
+library UpdateHistories {
     function set(
         uint256[] storage epochs,
         uint256[] storage values,
@@ -81,9 +57,9 @@ library UpdateHistoriesLib {
 
     function find(
         uint256[] memory epochs,
-        IEnvironment.Environment[] memory values,
+        Environment.EnvironmentValue[] memory values,
         uint256 epoch
-    ) internal pure returns (IEnvironment.Environment memory) {
+    ) internal pure returns (Environment.EnvironmentValue memory) {
         if (epochs[epochs.length - 1] <= epoch) return values[epochs.length - 1];
         uint256 idx = mBinarySearch(epochs, epoch, 0, epochs.length);
         return values[idx];
