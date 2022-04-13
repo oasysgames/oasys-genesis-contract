@@ -21,6 +21,9 @@ describe('StakeManager', () => {
   let accounts: Account[]
   let stakeManager: Contract
   let environment: Contract
+  let allowlist: Contract
+
+  let deployer: Account
 
   let validator1: Validator
   let validator2: Validator
@@ -52,11 +55,24 @@ describe('StakeManager', () => {
     expect(fromWei(actual.toString())).to.equal(expectEther)
   }
 
-  const initialize = async () => {
+  const allowAddress = async (validator: Validator) => {
+    await allowlist.connect(deployer).addAddress(validator.owner.address)
+  }
+
+  const initializeContracts = async () => {
     await environment.initialize(initialEnv)
-    await stakeManager.initialize(environment.address)
+    await stakeManager.initialize(environment.address, allowlist.address)
+  }
+
+  const initializeValidators = async () => {
+    await Promise.all(validators.map((x) => allowAddress(x)))
     await Promise.all(validators.map((x) => x.joinValidator()))
     await fixedValidator.stake(fixedValidator, '500')
+  }
+
+  const initialize = async () => {
+    await initializeContracts()
+    await initializeValidators()
   }
 
   const toNextEpoch = async (validator?: Validator) => {
@@ -76,13 +92,15 @@ describe('StakeManager', () => {
 
   before(async () => {
     accounts = await ethers.getSigners()
+    deployer = accounts[0]
   })
 
   beforeEach(async () => {
     await network.provider.send('hardhat_reset')
 
-    environment = await (await ethers.getContractFactory('Environment')).deploy()
-    stakeManager = await (await ethers.getContractFactory('StakeManager')).deploy()
+    environment = await (await ethers.getContractFactory('Environment')).connect(deployer).deploy()
+    allowlist = await (await ethers.getContractFactory('Allowlist')).connect(deployer).deploy()
+    stakeManager = await (await ethers.getContractFactory('StakeManager')).connect(deployer).deploy()
 
     validator1 = new Validator(stakeManager, accounts[1], accounts[2])
     validator2 = new Validator(stakeManager, accounts[3], accounts[4])
@@ -120,11 +138,16 @@ describe('StakeManager', () => {
 
     beforeEach(async () => {
       validator = new Validator(stakeManager, owner, operator)
-      await initialize()
+      await initializeContracts()
     })
 
     it('joinValidator()', async () => {
       let tx = validator.joinValidator(zeroAddress)
+      await expect(tx).to.revertedWith('not allowed.')
+
+      await allowAddress(validator)
+
+      tx = validator.joinValidator(zeroAddress)
       await expect(tx).to.revertedWith('operator is zero address.')
 
       tx = validator.joinValidator(owner.address)
@@ -139,6 +162,7 @@ describe('StakeManager', () => {
     it('updateOperator()', async () => {
       const newOperator = accounts[accounts.length - 3]
 
+      await allowAddress(validator)
       await validator.joinValidator()
 
       let tx = validator.updateOperator(zeroAddress)
@@ -161,6 +185,7 @@ describe('StakeManager', () => {
     })
 
     it('deactivateValidator() and activateValidator()', async () => {
+      await allowAddress(validator)
       await validator.joinValidator()
 
       // from owner
@@ -186,6 +211,7 @@ describe('StakeManager', () => {
     })
 
     it('updateCommissionRate()', async () => {
+      await allowAddress(validator)
       await validator.joinValidator()
       await staker1.stake(validator, '1000')
 
@@ -206,6 +232,7 @@ describe('StakeManager', () => {
     })
 
     it('claimCommissions()', async () => {
+      await allowAddress(validator)
       await validator.joinValidator()
       await validator.updateCommissionRate(50)
       await staker1.stake(validator, '1000')
@@ -216,7 +243,7 @@ describe('StakeManager', () => {
       // from owner
       await validator.claimCommissions(owner)
       await validator.expectBalance('10000.005707762557077625')
-      await expectContractBalance('1499.994292237442922375')
+      await expectContractBalance('999.994292237442922375')
 
       await toNextEpoch()
       await toNextEpoch()
@@ -224,7 +251,7 @@ describe('StakeManager', () => {
       // from operator
       await validator.claimCommissions(operator)
       await validator.expectBalance('10000.017123287671232875')
-      await expectContractBalance('1499.982876712328767125')
+      await expectContractBalance('999.982876712328767125')
 
       // from attacker
       const tx = validator.claimCommissions(attacker)

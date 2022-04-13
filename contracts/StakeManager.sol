@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 
 import { System } from "./System.sol";
 import { Environment } from "./Environment.sol";
+import { IAllowlist } from "./lib/IAllowlist.sol";
 import { Constants } from "./lib/Constants.sol";
 import { UpdateHistories } from "./lib/UpdateHistories.sol";
 import { Validator as ValidatorLib } from "./lib/Validator.sol";
@@ -85,6 +86,7 @@ contract StakeManager is System {
      *************/
 
     Environment public environment;
+    IAllowlist public allowlist;
 
     /*************
      * Variables *
@@ -172,8 +174,9 @@ contract StakeManager is System {
      * This method is called by the genesis validator in the first epoch.
      * @param _environment Address of the Environment contract.
      */
-    function initialize(Environment _environment) external onlyCoinbase initializer {
+    function initialize(Environment _environment, IAllowlist _allowlist) external onlyCoinbase initializer {
         environment = _environment;
+        allowlist = _allowlist;
     }
 
     /**
@@ -256,6 +259,8 @@ contract StakeManager is System {
      * @param operator Address used for block signing.
      */
     function joinValidator(address operator) external {
+        require(allowlist.containsAddress(msg.sender), "not allowed.");
+
         validators[msg.sender].join(operator);
         validatorOwners.push(msg.sender);
         operatorToOwner[operator] = msg.sender;
