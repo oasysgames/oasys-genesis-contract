@@ -8,6 +8,7 @@ import { Constants } from "./Constants.sol";
 import { Math } from "./Math.sol";
 import { UpdateHistories } from "./UpdateHistories.sol";
 import { Validator as ValidatorLib } from "./Validator.sol";
+import { Token } from "./Token.sol";
 
 /**
  * @title Staker
@@ -24,9 +25,14 @@ library Staker {
         StakeManager.Staker storage staker,
         Environment environment,
         StakeManager.Validator storage validator,
+        Token.Type token,
         uint256 amount
     ) internal {
-        staker.stakeUpdates[validator.owner].add(staker.stakeAmounts[validator.owner], environment.epoch() + 1, amount);
+        staker.stakeUpdates[token][validator.owner].add(
+            staker.stakeAmounts[token][validator.owner],
+            environment.epoch() + 1,
+            amount
+        );
         validator.stake(environment, staker.signer, amount);
     }
 
@@ -34,13 +40,18 @@ library Staker {
         StakeManager.Staker storage staker,
         Environment environment,
         StakeManager.Validator storage validator,
+        Token.Type token,
         uint256 amount
     ) internal returns (uint256) {
         uint256 epoch = environment.epoch();
-        uint256 current = getStake(staker, validator.owner, epoch);
-        uint256 next = getStake(staker, validator.owner, epoch + 1);
+        uint256 current = getStake(staker, validator.owner, token, epoch);
+        uint256 next = getStake(staker, validator.owner, token, epoch + 1);
 
-        amount = staker.stakeUpdates[validator.owner].sub(staker.stakeAmounts[validator.owner], epoch + 1, amount);
+        amount = staker.stakeUpdates[token][validator.owner].sub(
+            staker.stakeAmounts[token][validator.owner],
+            epoch + 1,
+            amount
+        );
         if (amount == 0) return 0;
         validator.unstake(environment, amount);
 
@@ -52,10 +63,10 @@ library Staker {
             unstakes -= refunds;
         }
         if (unstakes > 0) {
-            _addUnstakeAmount(staker, environment, unstakes);
+            _addUnstakeAmount(staker, environment, token, unstakes);
         }
         if (refunds > 0) {
-            payable(staker.signer).transfer(refunds);
+            Token.transfers(token, msg.sender, refunds);
         }
         return amount;
     }
@@ -69,24 +80,14 @@ library Staker {
         (uint256 rewards, uint256 lastClaim) = getRewards(staker, environment, validator, epochs);
         staker.lastClaimReward[validator.owner] = lastClaim;
         if (rewards > 0) {
-            payable(staker.signer).transfer(rewards);
+            Token.transfers(Token.Type.OAS, msg.sender, rewards);
         }
     }
 
     function claimUnstakes(StakeManager.Staker storage staker, Environment environment) internal {
-        uint256 unstakes = getUnstakes(staker, environment);
-        if (unstakes == 0) return;
-
-        uint256 length = staker.unstakeUpdates.length;
-        if (staker.unstakeUpdates[length - 1] <= environment.epoch()) {
-            delete staker.unstakeUpdates;
-            delete staker.unstakeAmounts;
-        } else {
-            staker.unstakeUpdates = [staker.unstakeUpdates[length - 1]];
-            staker.unstakeAmounts = [staker.unstakeAmounts[length - 1]];
-        }
-
-        payable(staker.signer).transfer(unstakes);
+        _claimUnstakes(staker, environment, Token.Type.wOAS);
+        _claimUnstakes(staker, environment, Token.Type.sOAS);
+        _claimUnstakes(staker, environment, Token.Type.OAS);
     }
 
     /******************
@@ -96,6 +97,7 @@ library Staker {
     function getStakes(
         StakeManager.Staker storage staker,
         address[] storage _validators,
+        Token.Type token,
         uint256 epoch
     )
         internal
@@ -110,8 +112,8 @@ library Staker {
         stakes = new uint256[](_validators.length);
         unstakes = new uint256[](_validators.length);
         for (uint256 i = 0; i < _validators.length; i++) {
-            uint256 current = getStake(staker, _validators[i], epoch);
-            uint256 next = getStake(staker, _validators[i], epoch + 1);
+            uint256 current = getStake(staker, _validators[i], token, epoch);
+            uint256 next = getStake(staker, _validators[i], token, epoch + 1);
             currents[i] = current;
             if (next > current) {
                 stakes[i] = next - current;
@@ -124,18 +126,20 @@ library Staker {
     function getStake(
         StakeManager.Staker storage staker,
         address validator,
+        Token.Type token,
         uint256 epoch
     ) internal view returns (uint256) {
-        return staker.stakeUpdates[validator].find(staker.stakeAmounts[validator], epoch);
+        return staker.stakeUpdates[token][validator].find(staker.stakeAmounts[token][validator], epoch);
     }
 
     function getTotalStake(
         StakeManager.Staker storage staker,
         address[] storage validators,
+        Token.Type token,
         uint256 epoch
     ) internal view returns (uint256 totalStake) {
         for (uint256 i = 0; i < validators.length; i++) {
-            totalStake += getStake(staker, validators[i], epoch);
+            totalStake += getStake(staker, validators[i], token, epoch);
         }
     }
 
@@ -156,7 +160,9 @@ library Staker {
         for (uint256 i = 0; i < epochs; i++) {
             lastClaim += 1;
 
-            uint256 _stake = getStake(staker, validator.owner, lastClaim);
+            uint256 _stake = getStake(staker, validator.owner, Token.Type.OAS, lastClaim) +
+                getStake(staker, validator.owner, Token.Type.wOAS, lastClaim) +
+                getStake(staker, validator.owner, Token.Type.sOAS, lastClaim);
             if (_stake == 0) continue;
 
             uint256 validatorRewards = validator.getRewardsWithoutCommissions(
@@ -174,20 +180,24 @@ library Staker {
         }
     }
 
-    function getUnstakes(StakeManager.Staker storage staker, Environment environment) internal view returns (uint256) {
-        uint256 length = staker.unstakeUpdates.length;
+    function getUnstakes(
+        StakeManager.Staker storage staker,
+        Environment environment,
+        Token.Type token
+    ) internal view returns (uint256) {
+        uint256 length = staker.unstakeUpdates[token].length;
         if (length == 0) return 0;
 
         uint256 epoch = environment.epoch();
         uint256 idx = length - 1;
-        if (idx > 0 && staker.unstakeUpdates[idx] > epoch) {
+        if (idx > 0 && staker.unstakeUpdates[token][idx] > epoch) {
             idx--;
         }
-        if (staker.unstakeUpdates[idx] > epoch) return 0;
+        if (staker.unstakeUpdates[token][idx] > epoch) return 0;
 
         uint256 unstakes;
         for (uint256 i = 0; i <= idx; i++) {
-            unstakes += staker.unstakeAmounts[i];
+            unstakes += staker.unstakeAmounts[token][i];
         }
         return unstakes;
     }
@@ -199,16 +209,37 @@ library Staker {
     function _addUnstakeAmount(
         StakeManager.Staker storage staker,
         Environment environment,
+        Token.Type token,
         uint256 amount
     ) private {
         uint256 nextEpoch = environment.epoch() + 1;
-        uint256 length = staker.unstakeUpdates.length;
+        uint256 length = staker.unstakeUpdates[token].length;
 
-        if (length == 0 || staker.unstakeUpdates[length - 1] != nextEpoch) {
-            staker.unstakeUpdates.push(nextEpoch);
-            staker.unstakeAmounts.push(amount);
+        if (length == 0 || staker.unstakeUpdates[token][length - 1] != nextEpoch) {
+            staker.unstakeUpdates[token].push(nextEpoch);
+            staker.unstakeAmounts[token].push(amount);
             return;
         }
-        staker.unstakeAmounts[length - 1] += amount;
+        staker.unstakeAmounts[token][length - 1] += amount;
+    }
+
+    function _claimUnstakes(
+        StakeManager.Staker storage staker,
+        Environment environment,
+        Token.Type token
+    ) private {
+        uint256 unstakes = getUnstakes(staker, environment, token);
+        if (unstakes == 0) return;
+
+        uint256 length = staker.unstakeUpdates[token].length;
+        if (staker.unstakeUpdates[token][length - 1] <= environment.epoch()) {
+            delete staker.unstakeUpdates[token];
+            delete staker.unstakeAmounts[token];
+        } else {
+            staker.unstakeUpdates[token] = [staker.unstakeUpdates[token][length - 1]];
+            staker.unstakeAmounts[token] = [staker.unstakeAmounts[token][length - 1]];
+        }
+
+        Token.transfers(token, msg.sender, unstakes);
     }
 }

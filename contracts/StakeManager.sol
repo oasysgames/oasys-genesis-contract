@@ -9,6 +9,7 @@ import { Constants } from "./lib/Constants.sol";
 import { UpdateHistories } from "./lib/UpdateHistories.sol";
 import { Validator as ValidatorLib } from "./lib/Validator.sol";
 import { Staker as StakerLib } from "./lib/Staker.sol";
+import { Token } from "./lib/Token.sol";
 
 /**
  * @title StakeManager
@@ -29,8 +30,8 @@ contract StakeManager is System {
     event ValidatorCommissionRateUpdated(address indexed validator, uint256 rate);
     event ValidatorSlashed(address indexed validator);
     event ValidatorJailed(address indexed validator, uint256 epoch);
-    event Staked(address indexed staker, address indexed validator, uint256 amount);
-    event Unstaked(address indexed staker, address indexed validator, uint256 amount);
+    event Staked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
+    event Unstaked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
 
     /***********
      * Structs *
@@ -70,13 +71,13 @@ contract StakeManager is System {
         // Staker address
         address signer;
         // Stake last updated epoch
-        mapping(address => uint256[]) stakeUpdates;
+        mapping(Token.Type => mapping(address => uint256[])) stakeUpdates;
         // Stake amounts per epoch
-        mapping(address => uint256[]) stakeAmounts;
+        mapping(Token.Type => mapping(address => uint256[])) stakeAmounts;
         // Last epoch to withdrawl unstake
-        uint256[] unstakeUpdates;
+        mapping(Token.Type => uint256[]) unstakeUpdates;
         // Unstake amounts per epoch
-        uint256[] unstakeAmounts;
+        mapping(Token.Type => uint256[]) unstakeAmounts;
         // Epoch of last claimed of rewards per validator
         mapping(address => uint256) lastClaimReward;
     }
@@ -337,35 +338,42 @@ contract StakeManager is System {
      * Stake tokens to validator.
      * The stakes will be effective from next epoch, so there is no reward in the current epoch.
      * @param validator Validator address.
+     * @param token Type of token.
+     * @param amount Amount of token.
      */
-    function stake(address validator) external payable validatorExists(validator) onlyNotLastBlock {
-        require(msg.value > 0, "amount is zero.");
+    function stake(
+        address validator,
+        Token.Type token,
+        uint256 amount
+    ) external payable validatorExists(validator) onlyNotLastBlock {
+        require(amount > 0, "amount is zero.");
 
+        Token.receives(token, msg.sender, amount);
         Staker storage staker = stakers[msg.sender];
         if (staker.signer == address(0)) {
             staker.signer = msg.sender;
             stakerSigners.push(msg.sender);
         }
-        staker.stake(environment, validators[validator], msg.value);
-        emit Staked(msg.sender, validator, msg.value);
+        staker.stake(environment, validators[validator], token, amount);
+        emit Staked(msg.sender, validator, token, amount);
     }
 
     /**
      * Unstake tokens from validator.
      * The stake will be locked until the end of the current epoch, but will be rewarded.
      * @param validator Validator address.
+     * @param token Type of token.
      * @param amount Unstake amounts.
      */
-    function unstake(address validator, uint256 amount)
-        external
-        validatorExists(validator)
-        stakerExists
-        onlyNotLastBlock
-    {
+    function unstake(
+        address validator,
+        Token.Type token,
+        uint256 amount
+    ) external validatorExists(validator) stakerExists onlyNotLastBlock {
         require(amount > 0, "amount is zero.");
 
-        amount = stakers[msg.sender].unstake(environment, validators[validator], amount);
-        emit Unstaked(msg.sender, validator, amount);
+        amount = stakers[msg.sender].unstake(environment, validators[validator], token, amount);
+        emit Unstaked(msg.sender, validator, token, amount);
     }
 
     /**
@@ -483,12 +491,16 @@ contract StakeManager is System {
     /**
      * Returns staker information.
      * @param staker Staker address.
+     * @param token Type of token.
      * @return stakes Total staked amounts.
      * @return unstakes Total unstaked amounts.
      */
-    function getStakerInfo(address staker) public view returns (uint256 stakes, uint256 unstakes) {
+    function getStakerInfo(address staker, Token.Type token) public view returns (uint256 stakes, uint256 unstakes) {
         Staker storage _staker = stakers[staker];
-        return (_staker.getTotalStake(validatorOwners, environment.epoch()), _staker.getUnstakes(environment));
+        return (
+            _staker.getTotalStake(validatorOwners, token, environment.epoch()),
+            _staker.getUnstakes(environment, token)
+        );
     }
 
     /**
@@ -567,7 +579,10 @@ contract StakeManager is System {
             if (idx == length) break;
             Staker storage staker = stakers[_validator.stakers[idx]];
             _stakers[i] = staker.signer;
-            stakes[i] = staker.getStake(_validator.owner, epoch);
+            stakes[i] =
+                staker.getStake(_validator.owner, Token.Type.OAS, epoch) +
+                staker.getStake(_validator.owner, Token.Type.wOAS, epoch) +
+                staker.getStake(_validator.owner, Token.Type.sOAS, epoch);
             i++;
         }
     }
@@ -575,13 +590,18 @@ contract StakeManager is System {
     /**
      * Returns a list of staking from Staker to a validator.
      * @param staker Staker address.
+     * @param token Type of token.
      * @param epoch Target epoch number.
      * @return _validators List of validator address.
      * @return stakes List of staked amounts for each staker.
      * @return stakeRequests List of stake amounts to be added in the next epoch.
      * @return unstakeRequests List of stake amounts to be reduced in the next epoch.
      */
-    function getStakerStakes(address staker, uint256 epoch)
+    function getStakerStakes(
+        address staker,
+        Token.Type token,
+        uint256 epoch
+    )
         external
         view
         returns (
@@ -594,6 +614,7 @@ contract StakeManager is System {
         _validators = validatorOwners;
         (stakes, stakeRequests, unstakeRequests) = stakers[staker].getStakes(
             validatorOwners,
+            token,
             epoch > 0 ? epoch : environment.epoch()
         );
     }
