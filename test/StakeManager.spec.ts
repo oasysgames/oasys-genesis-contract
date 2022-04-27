@@ -4,7 +4,17 @@ import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { toWei, fromWei } from 'web3-utils'
 import { expect } from 'chai'
 
-import { EnvironmentValue, Validator, Staker, mining, zeroAddress } from './helpers'
+import {
+  EnvironmentValue,
+  Validator,
+  Staker,
+  mining,
+  zeroAddress,
+  Token,
+  WOASAddress,
+  SOASAddress,
+  TestERC20Bytecode,
+} from './helpers'
 
 const initialEnv: EnvironmentValue = {
   startBlock: 0,
@@ -22,6 +32,8 @@ describe('StakeManager', () => {
   let stakeManager: Contract
   let environment: Contract
   let allowlist: Contract
+  let woas: Contract
+  let soas: Contract
 
   let deployer: Account
 
@@ -38,6 +50,7 @@ describe('StakeManager', () => {
   let staker4: Staker
   let staker5: Staker
   let staker6: Staker
+  let stakers: Staker[]
 
   let currentBlock = 0
 
@@ -50,9 +63,18 @@ describe('StakeManager', () => {
     }
   }
 
-  const expectContractBalance = async (expectEther: string) => {
-    const actual = await stakeManager.provider.getBalance(stakeManager.address)
-    expect(fromWei(actual.toString())).to.equal(expectEther)
+  const expectBalance = async (
+    holder: Contract | Account,
+    expectOAS: string,
+    expectWOAS: string,
+    expectSOAS: string,
+  ) => {
+    const actualOAS = fromWei((await stakeManager.provider.getBalance(holder.address)).toString())
+    const actualWOAS = fromWei((await woas.balanceOf(holder.address)).toString())
+    const actualSOAS = fromWei((await soas.balanceOf(holder.address)).toString())
+    expect(actualOAS).to.match(new RegExp(`^${expectOAS}`))
+    expect(actualWOAS).to.match(new RegExp(`^${expectWOAS}`))
+    expect(actualSOAS).to.match(new RegExp(`^${expectSOAS}`))
   }
 
   const allowAddress = async (validator: Validator) => {
@@ -67,7 +89,7 @@ describe('StakeManager', () => {
   const initializeValidators = async () => {
     await Promise.all(validators.map((x) => allowAddress(x)))
     await Promise.all(validators.map((x) => x.joinValidator()))
-    await fixedValidator.stake(fixedValidator, '500')
+    await fixedValidator.stake(Token.OAS, fixedValidator, '500')
   }
 
   const initialize = async () => {
@@ -115,6 +137,16 @@ describe('StakeManager', () => {
     staker4 = new Staker(stakeManager, accounts[14])
     staker5 = new Staker(stakeManager, accounts[15])
     staker6 = new Staker(stakeManager, accounts[16])
+    stakers = [staker1, staker2, staker3, staker4, staker5, staker6]
+
+    await network.provider.send('hardhat_setCode', [WOASAddress, TestERC20Bytecode])
+    await network.provider.send('hardhat_setCode', [SOASAddress, TestERC20Bytecode])
+    woas = (await ethers.getContractFactory('TestERC20')).attach(WOASAddress)
+    soas = (await ethers.getContractFactory('TestERC20')).attach(SOASAddress)
+    await Promise.all(stakers.map((x) => woas.connect(x.signer).mint({ value: toWei('1000') })))
+    await Promise.all(stakers.map((x) => soas.connect(x.signer).mint({ value: toWei('1000') })))
+    await Promise.all(stakers.map((x) => woas.connect(x.signer).approve(stakeManager.address, toWei('1000'))))
+    await Promise.all(stakers.map((x) => soas.connect(x.signer).approve(stakeManager.address, toWei('1000'))))
 
     currentBlock = 0
   })
@@ -213,7 +245,7 @@ describe('StakeManager', () => {
     it('updateCommissionRate()', async () => {
       await allowAddress(validator)
       await validator.joinValidator()
-      await staker1.stake(validator, '1000')
+      await staker1.stake(Token.OAS, validator, '1000')
 
       // from owner
       expect((await validator.getInfo()).commissionRate).to.equal(0)
@@ -235,23 +267,29 @@ describe('StakeManager', () => {
       await allowAddress(validator)
       await validator.joinValidator()
       await validator.updateCommissionRate(50)
-      await staker1.stake(validator, '1000')
+
+      await staker1.stake(Token.OAS, validator, '500')
+      await staker1.stake(Token.wOAS, validator, '250')
+      await staker1.stake(Token.sOAS, validator, '250')
+
+      await expectBalance(stakeManager, '500', '250', '250')
+      await expectBalance(validator.owner, '10000', '0', '0')
 
       await toNextEpoch()
       await toNextEpoch()
 
       // from owner
       await validator.claimCommissions(owner)
-      await validator.expectBalance('10000.005707762557077625')
-      await expectContractBalance('999.994292237442922375')
+      await expectBalance(stakeManager, '499.994292237442922375', '250', '250')
+      await expectBalance(validator.owner, '10000.005707762557077625', '0', '0')
 
       await toNextEpoch()
       await toNextEpoch()
 
       // from operator
       await validator.claimCommissions(operator)
-      await validator.expectBalance('10000.017123287671232875')
-      await expectContractBalance('999.982876712328767125')
+      await expectBalance(stakeManager, '499.982876712328767125', '250', '250')
+      await expectBalance(validator.owner, '10000.017123287671232875', '0', '0')
 
       // from attacker
       const tx = validator.claimCommissions(attacker)
@@ -265,270 +303,374 @@ describe('StakeManager', () => {
     })
 
     it('stake()', async () => {
-      await staker1.expectTotalStake('0')
+      await expectBalance(stakeManager, '500', '0', '0')
+      await expectBalance(staker1.signer, '8000', '1000', '1000')
+      await staker1.expectTotalStake('0', '0', '0')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '0', '0', '0', '0'],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
       )
 
-      await staker1.stake(validator1, '10')
+      await staker1.stake(Token.OAS, validator1, '5')
+      await staker1.stake(Token.wOAS, validator1, '2.5')
+      await staker1.stake(Token.sOAS, validator1, '2.5')
 
-      await staker1.expectTotalStake('0')
+      await expectBalance(stakeManager, '505', '2.5', '2.5')
+      await expectBalance(staker1.signer, '7995', '997.5', '997.5')
+      await staker1.expectTotalStake('0', '0', '0')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '0', '0', '0', '0'],
-      )
-
-      await toNextEpoch()
-
-      await staker1.expectTotalStake('10')
-      await staker1.expectStakes(
-        0,
-        [validator1, validator2, validator3, validator4, fixedValidator],
-        ['10', '0', '0', '0', '0'],
-      )
-
-      await staker1.stake(validator1, '20')
-      await staker1.stake(validator1, '30')
-
-      await staker1.expectTotalStake('10')
-      await staker1.expectStakes(
-        0,
-        [validator1, validator2, validator3, validator4, fixedValidator],
-        ['10', '0', '0', '0', '0'],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
       )
 
       await toNextEpoch()
 
-      await staker1.expectTotalStake('60')
+      await expectBalance(stakeManager, '505', '2.5', '2.5')
+      await expectBalance(staker1.signer, '7995', '997.5', '997.5')
+      await staker1.expectTotalStake('5', '2.5', '2.5')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['60', '0', '0', '0', '0'],
+        [
+          ['5', '0', '0', '0', '0'],
+          ['2.5', '0', '0', '0', '0'],
+          ['2.5', '0', '0', '0', '0'],
+        ],
       )
 
-      await staker1.stake(validator1, '40')
-      await staker1.stake(validator2, '40')
+      await staker1.stake(Token.OAS, validator1, '20')
+      await staker1.stake(Token.OAS, validator1, '10')
+      await staker1.stake(Token.wOAS, validator1, '10')
+      await staker1.stake(Token.sOAS, validator1, '10')
 
-      await staker1.expectTotalStake('60')
+      await expectBalance(stakeManager, '535', '12.5', '12.5')
+      await expectBalance(staker1.signer, '7965', '987.5', '987.5')
+      await staker1.expectTotalStake('5', '2.5', '2.5')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['60', '0', '0', '0', '0'],
+        [
+          ['5', '0', '0', '0', '0'],
+          ['2.5', '0', '0', '0', '0'],
+          ['2.5', '0', '0', '0', '0'],
+        ],
       )
 
       await toNextEpoch()
 
-      await staker1.expectTotalStake('140')
+      await expectBalance(stakeManager, '535', '12.5', '12.5')
+      await expectBalance(staker1.signer, '7965', '987.5', '987.5')
+      await staker1.expectTotalStake('35', '12.5', '12.5')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['100', '40', '0', '0', '0'],
+        [
+          ['35', '0', '0', '0', '0'],
+          ['12.5', '0', '0', '0', '0'],
+          ['12.5', '0', '0', '0', '0'],
+        ],
       )
 
-      await expectContractBalance('640')
+      await staker1.stake(Token.OAS, validator1, '20')
+      await staker1.stake(Token.wOAS, validator1, '10')
+      await staker1.stake(Token.sOAS, validator1, '10')
+      await staker1.stake(Token.OAS, validator2, '20')
+      await staker1.stake(Token.wOAS, validator2, '10')
+      await staker1.stake(Token.sOAS, validator2, '10')
+
+      await toNextEpoch()
+
+      await expectBalance(stakeManager, '575', '32.5', '32.5')
+      await expectBalance(staker1.signer, '7925', '967.5', '967.5')
+      await staker1.expectTotalStake('75', '32.5', '32.5')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['55', '20', '0', '0', '0'],
+          ['22.5', '10', '0', '0', '0'],
+          ['22.5', '10', '0', '0', '0'],
+        ],
+      )
     })
 
-    it('unstake()', async () => {
-      await staker1.stake(validator1, '10')
-      await staker1.stake(validator2, '20')
-      await expectContractBalance('530')
+    it('unstake() and claimUnstakes()', async () => {
+      await expectBalance(stakeManager, '500', '0', '0')
+      await expectBalance(staker1.signer, '8000', '1000', '1000')
+      await staker1.expectTotalStake('0', '0', '0')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
+
+      await staker1.stake(Token.OAS, validator1, '5')
+      await staker1.stake(Token.wOAS, validator1, '5')
+      await staker1.stake(Token.OAS, validator2, '10')
+      await staker1.stake(Token.sOAS, validator2, '10')
 
       await toNextEpoch()
 
-      await staker1.expectTotalStake('30')
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('15', '5', '10')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['10', '20', '0', '0', '0'],
+        [
+          ['5', '10', '0', '0', '0'],
+          ['5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
       )
 
-      await staker1.unstake(validator1, '5')
+      await staker1.unstake(Token.OAS, validator1, '2.5')
+      await staker1.unstake(Token.wOAS, validator1, '2.5')
+      await staker1.unstake(Token.sOAS, validator1, '2.5')
 
-      await staker1.expectTotalStake('30')
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('15', '5', '10')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['10', '20', '0', '0', '0'],
+        [
+          ['5', '10', '0', '0', '0'],
+          ['5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
       )
-      await expectContractBalance('530')
 
       await toNextEpoch()
 
-      await staker1.expectTotalStake('25')
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('12.5', '2.5', '10')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['5', '20', '0', '0', '0'],
+        [
+          ['2.5', '10', '0', '0', '0'],
+          ['2.5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
       )
 
-      await staker1.unstake(validator1, '1')
-      await staker1.unstake(validator1, '2')
+      await staker1.unstake(Token.OAS, validator1, '1')
+      await staker1.unstake(Token.OAS, validator1, '1')
+      await staker1.unstake(Token.wOAS, validator1, '1')
+      await staker1.unstake(Token.wOAS, validator1, '1')
 
-      await staker1.expectTotalStake('25')
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('12.5', '2.5', '10')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['5', '20', '0', '0', '0'],
+        [
+          ['2.5', '10', '0', '0', '0'],
+          ['2.5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
       )
-      await expectContractBalance('530')
 
       await toNextEpoch()
 
-      await staker1.expectTotalStake('22')
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('10.5', '0.5', '10')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['2', '20', '0', '0', '0'],
+        [
+          ['0.5', '10', '0', '0', '0'],
+          ['0.5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
       )
 
-      await staker1.unstake(validator1, '9999')
-      await staker1.unstake(validator2, '10')
-
-      await staker1.expectTotalStake('22')
-      await staker1.expectStakes(
-        0,
-        [validator1, validator2, validator3, validator4, fixedValidator],
-        ['2', '20', '0', '0', '0'],
-      )
-      await expectContractBalance('530')
+      await staker1.unstake(Token.OAS, validator1, '9999')
+      await staker1.unstake(Token.wOAS, validator1, '9999')
+      await staker1.unstake(Token.OAS, validator2, '5')
+      await staker1.unstake(Token.sOAS, validator2, '5')
 
       await toNextEpoch()
 
-      await staker1.expectTotalStake('10')
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('5', '0', '5')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '10', '0', '0', '0'],
+        [
+          ['0', '5', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+        ],
+      )
+
+      await staker1.claimUnstakes()
+
+      await expectBalance(stakeManager, '505', '0', '5')
+      await expectBalance(staker1.signer, '7995', '1000', '995')
+      await staker1.expectTotalStake('5', '0', '5')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '5', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+        ],
       )
 
       // testing for immediate refunds
-      await staker1.expectBalance('9970')
+      await staker1.stake(Token.OAS, validator2, '5')
+      await staker1.stake(Token.wOAS, validator2, '10')
+      await staker1.stake(Token.sOAS, validator2, '15')
 
-      await staker1.claimUnstakes()
-
-      await staker1.expectBalance('9990')
-      await staker1.expectTotalStake('10')
+      await expectBalance(stakeManager, '510', '10', '20')
+      await expectBalance(staker1.signer, '7990', '990', '980')
+      await staker1.expectTotalStake('5', '0', '5')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '10', '0', '0', '0'],
+        [
+          ['0', '5', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+        ],
       )
-      await expectContractBalance('510')
 
-      await staker1.stake(validator2, '5')
+      await staker1.unstake(Token.OAS, validator2, '10')
+      await staker1.unstake(Token.wOAS, validator2, '15')
+      await staker1.unstake(Token.sOAS, validator2, '20')
 
-      await staker1.expectBalance('9985')
-      await staker1.expectTotalStake('10')
+      await expectBalance(stakeManager, '505', '0', '5')
+      await expectBalance(staker1.signer, '7995', '1000', '995')
+      await staker1.expectTotalStake('5', '0', '5')
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '10', '0', '0', '0'],
+        [
+          ['0', '5', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+        ],
       )
-      await expectContractBalance('515')
-
-      await staker1.unstake(validator2, '10')
-
-      await staker1.expectBalance('9990')
-      await staker1.expectTotalStake('10')
-      await staker1.expectStakes(
-        0,
-        [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '10', '0', '0', '0'],
-      )
-      await expectContractBalance('510')
-
-      await toNextEpoch()
-
-      await staker1.claimUnstakes()
-
-      await staker1.expectBalance('9995')
-      await staker1.expectTotalStake('5')
-      await staker1.expectStakes(
-        0,
-        [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '5', '0', '0', '0'],
-      )
-      await expectContractBalance('505')
-
-      await staker1.stake(validator2, '10')
-
-      await staker1.expectBalance('9985')
-      await staker1.expectTotalStake('5')
-      await staker1.expectStakes(
-        0,
-        [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '5', '0', '0', '0'],
-      )
-      await expectContractBalance('515')
-
-      await staker1.unstake(validator2, '5')
-
-      await staker1.expectBalance('9990')
-      await staker1.expectTotalStake('5')
-      await staker1.expectStakes(
-        0,
-        [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '5', '0', '0', '0'],
-      )
-      await expectContractBalance('510')
-
-      await toNextEpoch()
-
-      await staker1.claimUnstakes()
-
-      await staker1.expectBalance('9990')
-      await staker1.expectTotalStake('10')
-      await staker1.expectStakes(
-        0,
-        [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '10', '0', '0', '0'],
-      )
-      await expectContractBalance('510')
-    })
-
-    it('claimUnstakes()', async () => {
-      await staker1.stake(validator1, '10')
-
-      await toNextEpoch()
-
-      await staker1.expectBalance('9990')
-      await expectContractBalance('510')
-
-      await staker1.unstake(validator1, '5')
 
       // cannot be claim until the next epoch
       await staker1.claimUnstakes()
-      await staker1.expectBalance('9990')
-      await expectContractBalance('510')
+
+      await expectBalance(stakeManager, '505', '0', '5')
+      await expectBalance(staker1.signer, '7995', '1000', '995')
+      await staker1.expectTotalStake('5', '0', '5')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '5', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+        ],
+      )
 
       await toNextEpoch()
-
       await staker1.claimUnstakes()
 
-      await expectContractBalance('505')
-      await staker1.expectBalance('9995')
+      await expectBalance(stakeManager, '500', '0', '0')
+      await expectBalance(staker1.signer, '8000', '1000', '1000')
+      await staker1.expectTotalStake('0', '0', '0')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
 
       // check for double claim
       await staker1.claimUnstakes()
-      await staker1.expectBalance('9995')
-      await expectContractBalance('505')
-
-      await staker1.unstake(validator1, '5')
       await toNextEpoch()
-      await toNextEpoch()
-      await toNextEpoch()
-
       await staker1.claimUnstakes()
-      await staker1.expectBalance('10000')
-      await expectContractBalance('500')
 
-      // check for double claim
-      await staker1.claimUnstakes()
-      await staker1.expectBalance('10000')
-      await expectContractBalance('500')
+      await expectBalance(stakeManager, '500', '0', '0')
+      await expectBalance(staker1.signer, '8000', '1000', '1000')
+      await staker1.expectTotalStake('0', '0', '0')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
+
+      await staker1.stake(Token.OAS, validator2, '10')
+      await staker1.stake(Token.wOAS, validator2, '15')
+      await staker1.stake(Token.sOAS, validator2, '20')
+
+      await expectBalance(stakeManager, '510', '15', '20')
+      await expectBalance(staker1.signer, '7990', '985', '980')
+      await staker1.expectTotalStake('0', '0', '0')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
+
+      await staker1.unstake(Token.OAS, validator2, '5')
+      await staker1.unstake(Token.wOAS, validator2, '10')
+      await staker1.unstake(Token.sOAS, validator2, '15')
+
+      await expectBalance(stakeManager, '505', '5', '5')
+      await expectBalance(staker1.signer, '7995', '995', '995')
+      await staker1.expectTotalStake('0', '0', '0')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
+
+      await toNextEpoch()
+
+      await expectBalance(stakeManager, '505', '5', '5')
+      await expectBalance(staker1.signer, '7995', '995', '995')
+      await staker1.expectTotalStake('5', '5', '5')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '5', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+        ],
+      )
     })
   })
 
@@ -546,8 +688,8 @@ describe('StakeManager', () => {
     it('when operating ratio is 100%', async () => {
       const startingEpoch = (await environment.epoch()).toNumber()
 
-      await staker1.stake(validator1, '1000')
-      await staker2.stake(validator1, '2000')
+      await staker1.stake(Token.OAS, validator1, '1000')
+      await staker2.stake(Token.OAS, validator1, '2000')
       await toNextEpoch()
 
       await staker1.claimRewards(validator1, 0)
@@ -556,22 +698,26 @@ describe('StakeManager', () => {
 
       await toNextEpoch() // 1
       await validator1.updateCommissionRate(10)
-      await staker1.stake(validator1, '500')
-      await staker2.stake(validator1, '500')
+      await staker1.stake(Token.wOAS, validator1, '500')
+      await staker2.stake(Token.sOAS, validator1, '500')
       await toNextEpoch() // 2
       await toNextEpoch() // 3
       await toNextEpoch() // 4
       await validator1.updateCommissionRate(50)
-      await staker1.stake(validator1, '500')
-      await staker2.stake(validator1, '500')
+      await staker1.stake(Token.wOAS, validator1, '250')
+      await staker1.stake(Token.sOAS, validator1, '250')
+      await staker2.stake(Token.wOAS, validator1, '250')
+      await staker2.stake(Token.sOAS, validator1, '250')
       await toNextEpoch() // 5
       await toNextEpoch() // 6
       await toNextEpoch() // 7
       await validator1.updateCommissionRate(100)
       await toNextEpoch() // 8
       await toNextEpoch() // 9
-      await staker1.unstake(validator1, '1000')
-      await staker2.unstake(validator1, '1000')
+      await staker1.unstake(Token.OAS, validator1, '500')
+      await staker1.unstake(Token.wOAS, validator1, '500')
+      await staker2.unstake(Token.OAS, validator1, '500')
+      await staker2.unstake(Token.sOAS, validator1, '500')
       await validator1.updateCommissionRate(10)
       await environment.connect(fixedValidator.operator).updateValue({
         ...(await environment.value()),
@@ -633,9 +779,9 @@ describe('StakeManager', () => {
       await validator1.claimCommissions(undefined, 5)
 
       const check1 = async () => {
-        await staker1.expectBalance('8000.06906392')
-        await staker2.expectBalance('7000.12271689')
-        await validator1.expectBalance('10000.01369863')
+        await expectBalance(staker1.signer, '7000.06906392', '250', '750')
+        await expectBalance(staker2.signer, '6000.12271689', '750', '250')
+        await expectBalance(validator1.owner, '10000.01369863', '0', '0')
 
         await staker1.expectRewards('0.01141552', validator1, 1)
         await staker2.expectRewards('0.01712328', validator1, 1)
@@ -683,9 +829,9 @@ describe('StakeManager', () => {
         await staker2.claimRewards(validator1, 0)
         await validator1.claimCommissions(undefined, 0)
 
-        await staker1.expectBalance('8000.21632420')
-        await staker2.expectBalance('7000.40011415')
-        await validator1.expectBalance('10000.25114155')
+        await expectBalance(staker1.signer, '7000.21632420', '250', '750')
+        await expectBalance(staker2.signer, '6000.40011415', '750', '250')
+        await expectBalance(validator1.owner, '10000.25114155', '0', '0')
 
         await staker1.expectRewards('0', validator1, 0)
         await staker2.expectRewards('0', validator1, 0)
@@ -699,8 +845,8 @@ describe('StakeManager', () => {
     })
 
     it('when operating ratio is 50%', async () => {
-      await staker1.stake(validator1, '1000')
-      await staker2.stake(validator1, '2000')
+      await staker1.stake(Token.OAS, validator1, '1000')
+      await staker2.stake(Token.OAS, validator1, '2000')
       await validator1.updateCommissionRate(10)
       await toNextEpoch()
 
@@ -733,8 +879,8 @@ describe('StakeManager', () => {
     })
 
     it('when operating ratio is 0%', async () => {
-      await staker1.stake(validator1, '1000')
-      await staker2.stake(validator1, '2000')
+      await staker1.stake(Token.OAS, validator1, '1000')
+      await staker2.stake(Token.OAS, validator1, '2000')
       await validator1.updateCommissionRate(10)
       await toNextEpoch()
 
@@ -781,9 +927,9 @@ describe('StakeManager', () => {
       })
       await toNextEpoch()
 
-      await staker1.stake(validator1, '500')
-      await staker1.stake(validator2, '500')
-      await staker1.stake(validator3, '500')
+      await staker1.stake(Token.OAS, validator1, '500')
+      await staker1.stake(Token.OAS, validator2, '500')
+      await staker1.stake(Token.OAS, validator3, '500')
       await expectCurrentValidators([fixedValidator])
 
       await toNextEpoch()
@@ -805,19 +951,19 @@ describe('StakeManager', () => {
     })
 
     it('updateValidators()', async () => {
-      await staker1.stake(validator1, '501')
-      await staker2.stake(validator2, '250')
-      await staker3.stake(validator2, '250')
-      await staker3.stake(validator3, '499.999')
-      await staker4.stake(validator4, '502')
+      await staker1.stake(Token.OAS, validator1, '501')
+      await staker2.stake(Token.OAS, validator2, '250')
+      await staker3.stake(Token.OAS, validator2, '250')
+      await staker3.stake(Token.OAS, validator3, '499.999')
+      await staker4.stake(Token.OAS, validator4, '502')
       await toNextEpoch(fixedValidator)
       await expectCurrentValidators([validator1, validator2, validator4, fixedValidator])
 
-      await staker3.stake(validator3, '10')
+      await staker3.stake(Token.OAS, validator3, '10')
       await toNextEpoch(fixedValidator)
       await expectCurrentValidators([validator1, validator2, validator3, validator4, fixedValidator])
 
-      await staker3.unstake(validator3, '10')
+      await staker3.unstake(Token.OAS, validator3, '10')
       await toNextEpoch(fixedValidator)
       await expectCurrentValidators([validator1, validator2, validator4, fixedValidator])
     })
@@ -829,9 +975,9 @@ describe('StakeManager', () => {
     })
 
     it('getCurrentValidators()', async () => {
-      await staker1.stake(validator1, '501')
-      await staker1.stake(validator2, '499')
-      await staker1.stake(validator3, '502')
+      await staker1.stake(Token.OAS, validator1, '501')
+      await staker1.stake(Token.OAS, validator2, '499')
+      await staker1.stake(Token.OAS, validator3, '502')
       await toNextEpoch()
 
       await expectCurrentValidators([validator1, validator3, fixedValidator], ['501', '502', '500'])
@@ -861,10 +1007,10 @@ describe('StakeManager', () => {
         )
       }
 
-      await staker1.stake(validator1, '1')
-      await staker2.stake(validator2, '2')
-      await staker3.stake(validator3, '3')
-      await staker4.stake(validator4, '4')
+      await staker1.stake(Token.OAS, validator1, '1')
+      await staker2.stake(Token.OAS, validator2, '2')
+      await staker3.stake(Token.OAS, validator3, '3')
+      await staker4.stake(Token.OAS, validator4, '4')
       await toNextEpoch()
 
       await _expect(0, 0, [staker1, staker2, staker3, staker4])
@@ -874,8 +1020,8 @@ describe('StakeManager', () => {
 
     it('getValidatorInfo()', async () => {
       await validator1.updateCommissionRate(10)
-      await staker1.stake(validator1, '500')
-      await staker2.stake(validator1, '250')
+      await staker1.stake(Token.OAS, validator1, '500')
+      await staker2.stake(Token.OAS, validator1, '250')
       await toNextEpoch()
 
       await Promise.all([...Array(50).keys()].map((_) => validator1.slash(validator1)))
@@ -890,35 +1036,35 @@ describe('StakeManager', () => {
     })
 
     it('getStakerInfo()', async () => {
-      await staker1.stake(validator1, '500')
-      await staker1.stake(validator2, '250')
+      await staker1.stake(Token.OAS, validator1, '500')
+      await staker1.stake(Token.OAS, validator2, '250')
       await toNextEpoch()
 
-      await staker1.unstake(validator2, '250')
+      await staker1.unstake(Token.OAS, validator2, '250')
       await toNextEpoch()
 
-      const acutal = await staker1.getInfo()
+      const acutal = await staker1.getInfo(Token.OAS)
       expect(fromWei(acutal.stakes.toString())).to.eql('500')
       expect(fromWei(acutal.unstakes.toString())).to.equal('250')
     })
 
     it('getValidatorStakes()', async () => {
-      await staker1.stake(validator1, '10')
+      await staker1.stake(Token.OAS, validator1, '10')
       await toNextEpoch()
 
-      await staker2.stake(validator1, '20')
+      await staker2.stake(Token.OAS, validator1, '20')
       await toNextEpoch()
 
-      await staker1.stake(validator1, '30')
-      await staker3.stake(validator1, '30')
+      await staker1.stake(Token.OAS, validator1, '30')
+      await staker3.stake(Token.OAS, validator1, '30')
       await toNextEpoch()
 
-      await staker4.stake(validator1, '40')
-      await staker5.stake(validator1, '40')
-      await staker6.stake(validator1, '40')
+      await staker4.stake(Token.OAS, validator1, '40')
+      await staker5.stake(Token.OAS, validator1, '40')
+      await staker6.stake(Token.OAS, validator1, '40')
       await toNextEpoch()
 
-      await staker2.unstake(validator1, '20')
+      await staker2.unstake(Token.OAS, validator1, '20')
       await toNextEpoch()
 
       await validator1.expectStakes(
@@ -964,17 +1110,33 @@ describe('StakeManager', () => {
     })
 
     it('getStakerStakes()', async () => {
-      await staker1.stake(validator1, '10')
-      await staker1.stake(validator2, '20')
-      await staker1.stake(validator4, '30')
-      await staker1.stake(validator4, '40')
+      await staker1.stake(Token.OAS, validator1, '5')
+      await staker1.stake(Token.OAS, validator1, '5')
+      await staker1.stake(Token.OAS, validator2, '10')
+      await staker1.stake(Token.wOAS, validator2, '10')
+      await staker1.stake(Token.OAS, validator4, '15')
+      await staker1.stake(Token.wOAS, validator4, '15')
+      await staker1.stake(Token.OAS, validator4, '20')
+      await staker1.stake(Token.sOAS, validator4, '20')
 
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '0', '0', '0', '0'],
-        ['10', '20', '0', '70', '0'],
-        ['0', '0', '0', '0', '0'],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+        [
+          ['10', '10', '0', '35', '0'],
+          ['0', '10', '0', '15', '0'],
+          ['0', '0', '0', '20', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
       )
 
       await toNextEpoch()
@@ -982,22 +1144,50 @@ describe('StakeManager', () => {
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['10', '20', '0', '70', '0'],
-        ['0', '0', '0', '0', '0'],
-        ['0', '0', '0', '0', '0'],
+        [
+          ['10', '10', '0', '35', '0'],
+          ['0', '10', '0', '15', '0'],
+          ['0', '0', '0', '20', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
       )
 
-      await staker1.unstake(validator1, '1')
-      await staker1.unstake(validator2, '2')
-      await staker1.unstake(validator4, '3')
-      await staker1.unstake(validator4, '4')
+      await staker1.unstake(Token.OAS, validator1, '1')
+      await staker1.unstake(Token.OAS, validator1, '1')
+      await staker1.unstake(Token.wOAS, validator1, '1')
+      await staker1.unstake(Token.sOAS, validator1, '1')
+      await staker1.unstake(Token.OAS, validator2, '2')
+      await staker1.unstake(Token.wOAS, validator2, '1')
+      await staker1.unstake(Token.OAS, validator4, '3')
+      await staker1.unstake(Token.sOAS, validator4, '1')
 
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['10', '20', '0', '70', '0'],
-        ['0', '0', '0', '0', '0'],
-        ['1', '2', '0', '7', '0'],
+        [
+          ['10', '10', '0', '35', '0'],
+          ['0', '10', '0', '15', '0'],
+          ['0', '0', '0', '20', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+        [
+          ['2', '2', '0', '3', '0'],
+          ['0', '1', '0', '0', '0'],
+          ['0', '0', '0', '1', '0'],
+        ],
       )
 
       await toNextEpoch()
@@ -1005,22 +1195,51 @@ describe('StakeManager', () => {
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['9', '18', '0', '63', '0'],
-        ['0', '0', '0', '0', '0'],
-        ['0', '0', '0', '0', '0'],
+        [
+          ['8', '8', '0', '32', '0'],
+          ['0', '9', '0', '15', '0'],
+          ['0', '0', '0', '19', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
       )
 
-      await staker1.stake(validator1, '2')
-      await staker1.stake(validator2, '4')
-      await staker1.stake(validator4, '6')
-      await staker1.stake(validator4, '7')
+      await staker1.stake(Token.wOAS, validator1, '1')
+      await staker1.stake(Token.sOAS, validator2, '2')
+      await staker1.stake(Token.OAS, validator4, '3')
+      await staker1.stake(Token.OAS, validator1, '10')
+      await staker1.stake(Token.wOAS, validator2, '20')
+      await staker1.stake(Token.sOAS, validator4, '30')
+      await staker1.unstake(Token.OAS, validator1, '10')
+      await staker1.unstake(Token.wOAS, validator2, '20')
+      await staker1.unstake(Token.sOAS, validator4, '30')
 
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['9', '18', '0', '63', '0'],
-        ['2', '4', '0', '13', '0'],
-        ['0', '0', '0', '0', '0'],
+        [
+          ['8', '8', '0', '32', '0'],
+          ['0', '9', '0', '15', '0'],
+          ['0', '0', '0', '19', '0'],
+        ],
+        [
+          ['0', '0', '0', '3', '0'],
+          ['1', '0', '0', '0', '0'],
+          ['0', '2', '0', '0', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
       )
 
       await toNextEpoch()
@@ -1028,39 +1247,157 @@ describe('StakeManager', () => {
       await staker1.expectStakes(
         0,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['11', '22', '0', '76', '0'],
-        ['0', '0', '0', '0', '0'],
-        ['0', '0', '0', '0', '0'],
+        [
+          ['8', '8', '0', '35', '0'],
+          ['1', '9', '0', '15', '0'],
+          ['0', '2', '0', '19', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
+
+      await staker1.stake(Token.OAS, validator1, '10')
+      await staker1.stake(Token.wOAS, validator2, '20')
+      await staker1.stake(Token.sOAS, validator4, '30')
+
+      await staker1.unstake(Token.OAS, validator1, '5')
+      await staker1.unstake(Token.wOAS, validator2, '10')
+      await staker1.unstake(Token.sOAS, validator4, '15')
+
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['8', '8', '0', '35', '0'],
+          ['1', '9', '0', '15', '0'],
+          ['0', '2', '0', '19', '0'],
+        ],
+        [
+          ['5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+          ['0', '0', '0', '15', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
+
+      await toNextEpoch()
+
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['13', '8', '0', '35', '0'],
+          ['1', '19', '0', '15', '0'],
+          ['0', '2', '0', '34', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
       )
 
       await staker1.expectStakes(
         1,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['0', '0', '0', '0', '0'],
-        ['10', '20', '0', '70', '0'],
-        ['0', '0', '0', '0', '0'],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+        [
+          ['10', '10', '0', '35', '0'],
+          ['0', '10', '0', '15', '0'],
+          ['0', '0', '0', '20', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
       )
 
       await staker1.expectStakes(
         2,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['10', '20', '0', '70', '0'],
-        ['0', '0', '0', '0', '0'],
-        ['1', '2', '0', '7', '0'],
+        [
+          ['10', '10', '0', '35', '0'],
+          ['0', '10', '0', '15', '0'],
+          ['0', '0', '0', '20', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+        [
+          ['2', '2', '0', '3', '0'],
+          ['0', '1', '0', '0', '0'],
+          ['0', '0', '0', '1', '0'],
+        ],
       )
 
       await staker1.expectStakes(
         3,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        ['9', '18', '0', '63', '0'],
-        ['2', '4', '0', '13', '0'],
-        ['0', '0', '0', '0', '0'],
+        [
+          ['8', '8', '0', '32', '0'],
+          ['0', '9', '0', '15', '0'],
+          ['0', '0', '0', '19', '0'],
+        ],
+        [
+          ['0', '0', '0', '3', '0'],
+          ['1', '0', '0', '0', '0'],
+          ['0', '2', '0', '0', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
+
+      await staker1.expectStakes(
+        4,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['8', '8', '0', '35', '0'],
+          ['1', '9', '0', '15', '0'],
+          ['0', '2', '0', '19', '0'],
+        ],
+        [
+          ['5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+          ['0', '0', '0', '15', '0'],
+        ],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
       )
     })
 
     it('getBlockAndSlashes()', async () => {
-      await staker1.stake(validator1, '500')
-      await staker1.stake(validator2, '500')
+      await staker1.stake(Token.OAS, validator1, '500')
+      await staker1.stake(Token.OAS, validator2, '500')
 
       await toNextEpoch()
       await toNextEpoch()
@@ -1090,20 +1427,20 @@ describe('StakeManager', () => {
         expect(fromWei(actual.toString())).to.match(new RegExp(`^${expectEther}`))
       }
 
-      await staker1.stake(validator1, '1000')
-      await staker2.stake(validator2, '2000')
+      await staker1.stake(Token.OAS, validator1, '1000')
+      await staker2.stake(Token.OAS, validator2, '2000')
       await toNextEpoch()
 
       await toNextEpoch() // 1
 
-      await staker1.stake(validator1, '500')
-      await staker2.stake(validator2, '500')
+      await staker1.stake(Token.OAS, validator1, '500')
+      await staker2.stake(Token.OAS, validator2, '500')
 
       await toNextEpoch() // 3
       await toNextEpoch() // 4
 
-      await staker1.unstake(validator1, '250')
-      await staker2.unstake(validator2, '250')
+      await staker1.unstake(Token.OAS, validator1, '250')
+      await staker2.unstake(Token.OAS, validator2, '250')
 
       await toNextEpoch() // 5
       await toNextEpoch() // 6

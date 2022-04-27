@@ -7,6 +7,7 @@ import { StakeManager } from "../StakeManager.sol";
 import { Constants } from "./Constants.sol";
 import { Math } from "./Math.sol";
 import { UpdateHistories } from "./UpdateHistories.sol";
+import { Token } from "./Token.sol";
 
 /**
  * @title Validator
@@ -79,7 +80,7 @@ library Validator {
         (uint256 commissions, uint256 lastClaim) = getCommissions(validator, environment, epochs);
         validator.lastClaimCommission = lastClaim;
         if (commissions > 0) {
-            payable(validator.owner).transfer(commissions);
+            Token.transfers(Token.Type.OAS, validator.owner, commissions);
         }
     }
 
