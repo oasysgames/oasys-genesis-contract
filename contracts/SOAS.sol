@@ -144,9 +144,6 @@ contract SOAS is ERC20 {
         address to,
         uint256 amount
     ) internal view override {
-        require(
-            from == address(0) || to == address(0) || from == staking || to == staking,
-            "cannot trasfer"
-        );
+        require(from == address(0) || to == address(0) || from == staking || to == staking, "cannot trasfer");
     }
 }
