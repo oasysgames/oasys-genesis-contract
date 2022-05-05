@@ -3,36 +3,15 @@
 pragma solidity ^0.8.0;
 
 import { System } from "./System.sol";
+import { IEnvironment } from "./IEnvironment.sol";
 import { EnvironmentValue as EnvironmentValueLib } from "./lib/EnvironmentValue.sol";
 
 /**
  * @title Environment
  * @dev The Environment contract has parameters for proof-of-stake.
  */
-contract Environment is System {
+contract Environment is IEnvironment, System {
     using EnvironmentValueLib for EnvironmentValue;
-
-    /***********
-     * Structs *
-     ***********/
-
-    struct EnvironmentValue {
-        // Block and epoch to which this setting applies
-        uint256 startBlock;
-        uint256 startEpoch;
-        // Block generation interval(by seconds)
-        uint256 blockPeriod;
-        // Number of blocks in epoch
-        uint256 epochPeriod;
-        // Annual rate of staking reward
-        uint256 rewardRate;
-        // Amount of tokens required to become a validator
-        uint256 validatorThreshold;
-        // Number of not sealed to jailing the validator
-        uint256 jailThreshold;
-        // Number of epochs to jailing the validator
-        uint256 jailPeriod;
-    }
 
     /*************
      * Variables *
@@ -47,9 +26,7 @@ contract Environment is System {
      ****************************/
 
     /**
-     * Initialization of contract.
-     * This method is called by the genesis validator in the first epoch.
-     * @param initialValue Initial environment value.
+     * @inheritdoc IEnvironment
      */
     function initialize(EnvironmentValue memory initialValue) external onlyCoinbase initializer {
         initialValue.startBlock = 0;
@@ -58,10 +35,7 @@ contract Environment is System {
     }
 
     /**
-     * Set the new environment value.
-     * This method can only be called by validator, and the values are validated by other validators.
-     * The new settings are applied starting at the epoch specified by "startEpoch".
-     * @param newValue New environment value.
+     * @inheritdoc IEnvironment
      */
     function updateValue(EnvironmentValue memory newValue) external onlyCoinbase {
         // solhint-disable-next-line reason-string
@@ -82,8 +56,7 @@ contract Environment is System {
      ******************/
 
     /**
-     * Returns the current epoch number.
-     * @return Current epoch number.
+     * @inheritdoc IEnvironment
      */
     function epoch() public view returns (uint256) {
         EnvironmentValue storage next = _getNext();
@@ -91,24 +64,21 @@ contract Environment is System {
     }
 
     /**
-     * Determine if the current block is the first block of the epoch.
-     * @return If true, it is the first block of the epoch.
+     * @inheritdoc IEnvironment
      */
     function isFirstBlock() public view returns (bool) {
         return (block.number) % value().epochPeriod == 0;
     }
 
     /**
-     * Determine if the current block is the last block of the epoch.
-     * @return If true, it is the last block of the epoch.
+     * @inheritdoc IEnvironment
      */
     function isLastBlock() public view returns (bool) {
         return (block.number + 1) % value().epochPeriod == 0;
     }
 
     /**
-     * Returns the environment value at the current epoch
-     * @return Environment value.
+     * @inheritdoc IEnvironment
      */
     function value() public view returns (EnvironmentValue memory) {
         EnvironmentValue storage next = _getNext();
@@ -116,8 +86,7 @@ contract Environment is System {
     }
 
     /**
-     * Returns the environment value for the next epoch.
-     * @return Environment value.
+     * @inheritdoc IEnvironment
      */
     function nextValue() external view returns (EnvironmentValue memory) {
         EnvironmentValue storage next = _getNext();
@@ -125,11 +94,9 @@ contract Environment is System {
     }
 
     /**
-     * Returns list of the update history of environment values
-     * @return epochs List of epoch numbers to which the values apply.
-     * @return _values List of environment values.
+     * @inheritdoc IEnvironment
      */
-    function epochAndValues() public view returns (uint256[] memory epochs, EnvironmentValue[] memory _values) {
+    function epochAndValues() external view returns (uint256[] memory epochs, EnvironmentValue[] memory _values) {
         return (updates, values);
     }
 

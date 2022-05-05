@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.0;
 
-import { Environment } from "../Environment.sol";
+import { IEnvironment } from "../IEnvironment.sol";
 
 /**
  * @title UpdateHistories
@@ -57,9 +57,9 @@ library UpdateHistories {
 
     function find(
         uint256[] memory epochs,
-        Environment.EnvironmentValue[] memory values,
+        IEnvironment.EnvironmentValue[] memory values,
         uint256 epoch
-    ) internal pure returns (Environment.EnvironmentValue memory) {
+    ) internal pure returns (IEnvironment.EnvironmentValue memory) {
         if (epochs[epochs.length - 1] <= epoch) return values[epochs.length - 1];
         uint256 idx = mBinarySearch(epochs, epoch, 0, epochs.length);
         return values[idx];
