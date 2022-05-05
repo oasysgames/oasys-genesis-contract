@@ -2,29 +2,29 @@
 
 pragma solidity ^0.8.0;
 
-import { Environment } from "../Environment.sol";
-import { StakeManager } from "../StakeManager.sol";
 import { Constants } from "./Constants.sol";
 import { Math } from "./Math.sol";
 import { UpdateHistories } from "./UpdateHistories.sol";
 import { Validator as ValidatorLib } from "./Validator.sol";
 import { Token } from "./Token.sol";
+import { IEnvironment } from "../IEnvironment.sol";
+import { IStakeManager } from "../IStakeManager.sol";
 
 /**
  * @title Staker
  */
 library Staker {
     using UpdateHistories for uint256[];
-    using ValidatorLib for StakeManager.Validator;
+    using ValidatorLib for IStakeManager.Validator;
 
     /********************
      * Public Functions *
      ********************/
 
     function stake(
-        StakeManager.Staker storage staker,
-        Environment environment,
-        StakeManager.Validator storage validator,
+        IStakeManager.Staker storage staker,
+        IEnvironment environment,
+        IStakeManager.Validator storage validator,
         Token.Type token,
         uint256 amount
     ) internal {
@@ -37,9 +37,9 @@ library Staker {
     }
 
     function unstake(
-        StakeManager.Staker storage staker,
-        Environment environment,
-        StakeManager.Validator storage validator,
+        IStakeManager.Staker storage staker,
+        IEnvironment environment,
+        IStakeManager.Validator storage validator,
         Token.Type token,
         uint256 amount
     ) internal returns (uint256) {
@@ -72,9 +72,9 @@ library Staker {
     }
 
     function claimRewards(
-        StakeManager.Staker storage staker,
-        Environment environment,
-        StakeManager.Validator storage validator,
+        IStakeManager.Staker storage staker,
+        IEnvironment environment,
+        IStakeManager.Validator storage validator,
         uint256 epochs
     ) internal {
         (uint256 rewards, uint256 lastClaim) = getRewards(staker, environment, validator, epochs);
@@ -84,7 +84,7 @@ library Staker {
         }
     }
 
-    function claimUnstakes(StakeManager.Staker storage staker, Environment environment) internal {
+    function claimUnstakes(IStakeManager.Staker storage staker, IEnvironment environment) internal {
         _claimUnstakes(staker, environment, Token.Type.wOAS);
         _claimUnstakes(staker, environment, Token.Type.sOAS);
         _claimUnstakes(staker, environment, Token.Type.OAS);
@@ -95,7 +95,7 @@ library Staker {
      ******************/
 
     function getStakes(
-        StakeManager.Staker storage staker,
+        IStakeManager.Staker storage staker,
         address[] storage _validators,
         Token.Type token,
         uint256 epoch
@@ -124,7 +124,7 @@ library Staker {
     }
 
     function getStake(
-        StakeManager.Staker storage staker,
+        IStakeManager.Staker storage staker,
         address validator,
         Token.Type token,
         uint256 epoch
@@ -133,7 +133,7 @@ library Staker {
     }
 
     function getTotalStake(
-        StakeManager.Staker storage staker,
+        IStakeManager.Staker storage staker,
         address[] storage validators,
         Token.Type token,
         uint256 epoch
@@ -144,9 +144,9 @@ library Staker {
     }
 
     function getRewards(
-        StakeManager.Staker storage staker,
-        Environment environment,
-        StakeManager.Validator storage validator,
+        IStakeManager.Staker storage staker,
+        IEnvironment environment,
+        IStakeManager.Validator storage validator,
         uint256 epochs
     ) internal view returns (uint256 rewards, uint256 lastClaim) {
         lastClaim = staker.lastClaimReward[validator.owner];
@@ -155,7 +155,7 @@ library Staker {
             epochs = prevEpoch - lastClaim;
         }
 
-        (uint256[] memory envUpdates, Environment.EnvironmentValue[] memory envValues) = environment.epochAndValues();
+        (uint256[] memory envUpdates, IEnvironment.EnvironmentValue[] memory envValues) = environment.epochAndValues();
 
         for (uint256 i = 0; i < epochs; i++) {
             lastClaim += 1;
@@ -181,8 +181,8 @@ library Staker {
     }
 
     function getUnstakes(
-        StakeManager.Staker storage staker,
-        Environment environment,
+        IStakeManager.Staker storage staker,
+        IEnvironment environment,
         Token.Type token
     ) internal view returns (uint256) {
         uint256 length = staker.unstakeUpdates[token].length;
@@ -207,8 +207,8 @@ library Staker {
      *********************/
 
     function _addUnstakeAmount(
-        StakeManager.Staker storage staker,
-        Environment environment,
+        IStakeManager.Staker storage staker,
+        IEnvironment environment,
         Token.Type token,
         uint256 amount
     ) private {
@@ -224,8 +224,8 @@ library Staker {
     }
 
     function _claimUnstakes(
-        StakeManager.Staker storage staker,
-        Environment environment,
+        IStakeManager.Staker storage staker,
+        IEnvironment environment,
         Token.Type token
     ) private {
         uint256 unstakes = getUnstakes(staker, environment, token);

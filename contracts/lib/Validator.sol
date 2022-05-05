@@ -2,12 +2,12 @@
 
 pragma solidity ^0.8.0;
 
-import { Environment } from "../Environment.sol";
-import { StakeManager } from "../StakeManager.sol";
 import { Constants } from "./Constants.sol";
 import { Math } from "./Math.sol";
 import { UpdateHistories } from "./UpdateHistories.sol";
 import { Token } from "./Token.sol";
+import { IEnvironment } from "../IEnvironment.sol";
+import { IStakeManager } from "../IStakeManager.sol";
 
 /**
  * @title Validator
@@ -19,7 +19,7 @@ library Validator {
      * Public Functions *
      ********************/
 
-    function join(StakeManager.Validator storage validator, address operator) internal {
+    function join(IStakeManager.Validator storage validator, address operator) internal {
         require(validator.owner == address(0), "already joined.");
 
         validator.owner = msg.sender;
@@ -27,24 +27,24 @@ library Validator {
         updateOperator(validator, operator);
     }
 
-    function updateOperator(StakeManager.Validator storage validator, address operator) internal {
+    function updateOperator(IStakeManager.Validator storage validator, address operator) internal {
         require(operator != address(0), "operator is zero address.");
         require(operator != validator.owner, "operator is same as owner.");
 
         validator.operator = operator;
     }
 
-    function activate(StakeManager.Validator storage validator) internal {
+    function activate(IStakeManager.Validator storage validator) internal {
         validator.active = true;
     }
 
-    function deactivate(StakeManager.Validator storage validator) internal {
+    function deactivate(IStakeManager.Validator storage validator) internal {
         validator.active = false;
     }
 
     function updateCommissionRate(
-        StakeManager.Validator storage validator,
-        Environment environment,
+        IStakeManager.Validator storage validator,
+        IEnvironment environment,
         uint256 newRate
     ) internal {
         require(newRate <= Constants.MAX_COMMISSION_RATE, "must be less than 100.");
@@ -52,8 +52,8 @@ library Validator {
     }
 
     function stake(
-        StakeManager.Validator storage validator,
-        Environment environment,
+        IStakeManager.Validator storage validator,
+        IEnvironment environment,
         address staker,
         uint256 amount
     ) internal {
@@ -65,16 +65,16 @@ library Validator {
     }
 
     function unstake(
-        StakeManager.Validator storage validator,
-        Environment environment,
+        IStakeManager.Validator storage validator,
+        IEnvironment environment,
         uint256 amount
     ) internal {
         validator.stakeUpdates.sub(validator.stakeAmounts, environment.epoch() + 1, amount);
     }
 
     function claimCommissions(
-        StakeManager.Validator storage validator,
-        Environment environment,
+        IStakeManager.Validator storage validator,
+        IEnvironment environment,
         uint256 epochs
     ) internal {
         (uint256 commissions, uint256 lastClaim) = getCommissions(validator, environment, epochs);
@@ -84,7 +84,7 @@ library Validator {
         }
     }
 
-    function slash(StakeManager.Validator storage validator, Environment environment) internal {
+    function slash(IStakeManager.Validator storage validator, IEnvironment environment) internal {
         validator.slashes[environment.epoch()] += 1;
     }
 
@@ -92,21 +92,21 @@ library Validator {
      * View Functions *
      ******************/
 
-    function isCandidates(StakeManager.Validator storage validator, Environment environment)
+    function isCandidates(IStakeManager.Validator storage validator, IEnvironment environment)
         internal
         view
         returns (bool)
     {
         if (!validator.active) return false;
 
-        Environment.EnvironmentValue memory env = environment.value();
+        IEnvironment.EnvironmentValue memory env = environment.value();
         uint256 epoch = environment.epoch();
         if (validator.jailEpoch > 0 && epoch - validator.jailEpoch < env.jailPeriod) return false;
         if (getTotalStake(validator, epoch + 1) < env.validatorThreshold) return false;
         return true;
     }
 
-    function getCommissionRate(StakeManager.Validator storage validator, uint256 epoch)
+    function getCommissionRate(IStakeManager.Validator storage validator, uint256 epoch)
         internal
         view
         returns (uint256)
@@ -114,13 +114,13 @@ library Validator {
         return validator.lastCommissionUpdates.find(validator.commissionRates, epoch);
     }
 
-    function getTotalStake(StakeManager.Validator storage validator, uint256 epoch) internal view returns (uint256) {
+    function getTotalStake(IStakeManager.Validator storage validator, uint256 epoch) internal view returns (uint256) {
         return validator.stakeUpdates.find(validator.stakeAmounts, epoch);
     }
 
     function getRewards(
-        StakeManager.Validator storage validator,
-        Environment.EnvironmentValue memory env,
+        IStakeManager.Validator storage validator,
+        IEnvironment.EnvironmentValue memory env,
         uint256 epoch
     ) internal view returns (uint256) {
         uint256 _stake = getTotalStake(validator, epoch);
@@ -145,8 +145,8 @@ library Validator {
     }
 
     function getRewardsWithoutCommissions(
-        StakeManager.Validator storage validator,
-        Environment.EnvironmentValue memory env,
+        IStakeManager.Validator storage validator,
+        IEnvironment.EnvironmentValue memory env,
         uint256 epoch
     ) internal view returns (uint256) {
         uint256 rewards = getRewards(validator, env, epoch);
@@ -159,8 +159,8 @@ library Validator {
     }
 
     function getCommissions(
-        StakeManager.Validator storage validator,
-        Environment environment,
+        IStakeManager.Validator storage validator,
+        IEnvironment environment,
         uint256 epochs
     ) internal view returns (uint256 commissions, uint256 lastClaim) {
         lastClaim = validator.lastClaimCommission;
@@ -169,7 +169,7 @@ library Validator {
             epochs = prevEpoch - lastClaim;
         }
 
-        (uint256[] memory envUpdates, Environment.EnvironmentValue[] memory envValues) = environment.epochAndValues();
+        (uint256[] memory envUpdates, IEnvironment.EnvironmentValue[] memory envValues) = environment.epochAndValues();
 
         for (uint256 i = 0; i < epochs; i++) {
             lastClaim += 1;
@@ -189,7 +189,7 @@ library Validator {
         }
     }
 
-    function getBlockAndSlashes(StakeManager.Validator storage validator, uint256 epoch)
+    function getBlockAndSlashes(IStakeManager.Validator storage validator, uint256 epoch)
         internal
         view
         returns (uint256, uint256)
