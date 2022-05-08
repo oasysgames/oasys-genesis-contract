@@ -60,7 +60,7 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
         string memory symbol
     ) external onlyOwner {
         require(sidechainId == block.chainid, "Invalid side chain id");
-        // require(mainchainId != sidechainId, "Same chain id");
+        require(mainchainId != sidechainId, "Same chain id");
 
         require(
             getSidechainERC721(mainchainId, mainchainERC721) == address(0),
