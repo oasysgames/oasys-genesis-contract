@@ -27,6 +27,8 @@ const initialEnv: EnvironmentValue = {
   jailPeriod: 2,
 }
 
+const gasPrice = 0
+
 describe('StakeManager', () => {
   let accounts: Account[]
   let stakeManager: Contract
@@ -78,12 +80,12 @@ describe('StakeManager', () => {
   }
 
   const allowAddress = async (validator: Validator) => {
-    await allowlist.connect(deployer).addAddress(validator.owner.address)
+    await allowlist.connect(deployer).addAddress(validator.owner.address, { gasPrice })
   }
 
   const initializeContracts = async () => {
-    await environment.initialize(initialEnv)
-    await stakeManager.initialize(environment.address, allowlist.address)
+    await environment.initialize(initialEnv, { gasPrice })
+    await stakeManager.initialize(environment.address, allowlist.address, { gasPrice })
   }
 
   const initializeValidators = async () => {
@@ -105,12 +107,12 @@ describe('StakeManager', () => {
     // updateValidators()
     await mining(currentBlock - 2)
     const restoreCoinbase = await setCoinbase(sender.address)
-    await stakeManager.connect(sender).updateValidators()
+    await stakeManager.connect(sender).updateValidators({ gasPrice })
 
     // updateValidatorBlocks()
     const { operators } = await stakeManager.getCurrentValidators()
     const blocks: number[] = operators.map((_: any) => ~~(initialEnv.epochPeriod / operators.length))
-    await stakeManager.connect(sender).updateValidatorBlocks(operators, blocks)
+    await stakeManager.connect(sender).updateValidatorBlocks(operators, blocks, { gasPrice })
 
     await restoreCoinbase()
 
@@ -125,10 +127,9 @@ describe('StakeManager', () => {
 
   const updateEnvironment = async (diff: object) => {
     const restoreCoinbase = await setCoinbase(fixedValidator.operator.address)
-    await environment.connect(fixedValidator.operator).updateValue({
-      ...(await environment.value()),
-      ...diff,
-    })
+    await environment
+      .connect(fixedValidator.operator)
+      .updateValue({ ...(await environment.value()), ...diff }, { gasPrice })
     await restoreCoinbase()
   }
 
@@ -170,10 +171,19 @@ describe('StakeManager', () => {
 
     woas = (await ethers.getContractFactory('TestERC20')).attach(WOASAddress)
     soas = (await ethers.getContractFactory('TestERC20')).attach(SOASAddress)
-    await Promise.all(stakers.map((x) => woas.connect(x.signer).mint({ value: toWei('1000') })))
-    await Promise.all(stakers.map((x) => soas.connect(x.signer).mint({ value: toWei('1000') })))
-    await Promise.all(stakers.map((x) => woas.connect(x.signer).approve(stakeManager.address, toWei('1000'))))
-    await Promise.all(stakers.map((x) => soas.connect(x.signer).approve(stakeManager.address, toWei('1000'))))
+    await Promise.all(
+      stakers.map(
+        (x) =>
+          new Promise(async (resolve) => {
+            const value = toWei('1000')
+            await woas.connect(x.signer).mint({ gasPrice, value })
+            await woas.connect(x.signer).approve(stakeManager.address, value, { gasPrice })
+            await soas.connect(x.signer).mint({ gasPrice, value })
+            await soas.connect(x.signer).approve(stakeManager.address, value, { gasPrice })
+            resolve(true)
+          }),
+      ),
+    )
 
     currentBlock = 0
   })
