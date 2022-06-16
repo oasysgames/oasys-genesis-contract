@@ -100,16 +100,42 @@ describe('StakeManager', () => {
   const toNextEpoch = async (validator?: Validator) => {
     currentBlock += initialEnv.epochPeriod
 
+    const sender = validator?.operator ?? fixedValidator.operator
+
     // updateValidators()
     await mining(currentBlock - 2)
-    await stakeManager.connect(validator?.operator ?? fixedValidator.operator).updateValidators()
+    const restoreCoinbase = await setCoinbase(sender.address)
+    await stakeManager.connect(sender).updateValidators()
 
     // updateValidatorBlocks()
     const { operators } = await stakeManager.getCurrentValidators()
     const blocks: number[] = operators.map((_: any) => ~~(initialEnv.epochPeriod / operators.length))
-    await stakeManager.connect(validator?.operator ?? fixedValidator.operator).updateValidatorBlocks(operators, blocks)
+    await stakeManager.connect(sender).updateValidatorBlocks(operators, blocks)
+
+    await restoreCoinbase()
 
     await mining(currentBlock)
+  }
+
+  const setCoinbase = async (address: string) => {
+    const current = await network.provider.send('eth_coinbase')
+    await network.provider.send('hardhat_setCoinbase', [address])
+    return async () => await network.provider.send('hardhat_setCoinbase', [current])
+  }
+
+  const updateEnvironment = async (diff: object) => {
+    const restoreCoinbase = await setCoinbase(fixedValidator.operator.address)
+    await environment.connect(fixedValidator.operator).updateValue({
+      ...(await environment.value()),
+      ...diff,
+    })
+    await restoreCoinbase()
+  }
+
+  const slash = async (validator: Validator, target: Validator, count: number) => {
+    const restoreCoinbase = await setCoinbase(validator.operator.address)
+    await Promise.all([...Array(count).keys()].map((_) => validator.slash(target)))
+    await restoreCoinbase()
   }
 
   before(async () => {
@@ -119,6 +145,9 @@ describe('StakeManager', () => {
 
   beforeEach(async () => {
     await network.provider.send('hardhat_reset')
+    await network.provider.send('hardhat_setCoinbase', [accounts[0].address])
+    await network.provider.send('hardhat_setCode', [WOASAddress, TestERC20Bytecode])
+    await network.provider.send('hardhat_setCode', [SOASAddress, TestERC20Bytecode])
 
     environment = await (await ethers.getContractFactory('Environment')).connect(deployer).deploy()
     allowlist = await (await ethers.getContractFactory('Allowlist')).connect(deployer).deploy()
@@ -139,8 +168,6 @@ describe('StakeManager', () => {
     staker6 = new Staker(stakeManager, accounts[16])
     stakers = [staker1, staker2, staker3, staker4, staker5, staker6]
 
-    await network.provider.send('hardhat_setCode', [WOASAddress, TestERC20Bytecode])
-    await network.provider.send('hardhat_setCode', [SOASAddress, TestERC20Bytecode])
     woas = (await ethers.getContractFactory('TestERC20')).attach(WOASAddress)
     soas = (await ethers.getContractFactory('TestERC20')).attach(SOASAddress)
     await Promise.all(stakers.map((x) => woas.connect(x.signer).mint({ value: toWei('1000') })))
@@ -677,8 +704,7 @@ describe('StakeManager', () => {
   describe('rewards and commissions', () => {
     beforeEach(async () => {
       await initialize()
-      await environment.connect(fixedValidator.operator).updateValue({
-        ...(await environment.value()),
+      await updateEnvironment({
         startEpoch: (await environment.epoch()).toNumber() + 1,
         jailThreshold: 500,
       })
@@ -719,11 +745,7 @@ describe('StakeManager', () => {
       await staker2.unstake(Token.OAS, validator1, '500')
       await staker2.unstake(Token.sOAS, validator1, '500')
       await validator1.updateCommissionRate(10)
-      await environment.connect(fixedValidator.operator).updateValue({
-        ...(await environment.value()),
-        startEpoch: startingEpoch + 12,
-        rewardRate: 50,
-      })
+      await updateEnvironment({ startEpoch: startingEpoch + 12, rewardRate: 50 })
       await toNextEpoch() // 10
 
       await staker1.expectRewards('0.01141552', validator1, 1)
@@ -855,10 +877,10 @@ describe('StakeManager', () => {
       await validator1.claimCommissions()
 
       await toNextEpoch() // 1
-      await Promise.all([...Array(60).keys()].map((_) => validator1.slash(validator1)))
+      await slash(validator1, validator1, 60)
       await toNextEpoch() // 2
       await toNextEpoch() // 3
-      await Promise.all([...Array(60).keys()].map((_) => validator1.slash(validator1)))
+      await slash(validator1, validator1, 60)
       await toNextEpoch() // 4
 
       await staker1.expectRewards('0.01027397', validator1, 1)
@@ -889,10 +911,10 @@ describe('StakeManager', () => {
       await validator1.claimCommissions()
 
       await toNextEpoch() // 1
-      await Promise.all([...Array(120).keys()].map((_) => validator1.slash(validator1)))
+      await slash(validator1, validator1, 120)
       await toNextEpoch() // 2
       await toNextEpoch() // 3
-      await Promise.all([...Array(120).keys()].map((_) => validator1.slash(validator1)))
+      await slash(validator1, validator1, 120)
       await toNextEpoch() // 4
 
       await staker1.expectRewards('0.01027397', validator1, 1)
@@ -920,8 +942,7 @@ describe('StakeManager', () => {
 
     it('slash()', async () => {
       const startingEpoch = (await environment.epoch()).toNumber()
-      await environment.connect(fixedValidator.operator).updateValue({
-        ...(await environment.value()),
+      await updateEnvironment({
         startEpoch: startingEpoch + 1,
         jailThreshold: 50,
       })
@@ -935,11 +956,11 @@ describe('StakeManager', () => {
       await toNextEpoch()
       await expectCurrentValidators([validator1, validator2, validator3, fixedValidator])
 
-      await Promise.all([...Array(49).keys()].map((_) => validator1.slash(validator2)))
+      await slash(validator1, validator2, 49)
       await toNextEpoch()
       await expectCurrentValidators([validator1, validator2, validator3, fixedValidator])
 
-      await Promise.all([...Array(50).keys()].map((_) => validator1.slash(validator2)))
+      await slash(validator1, validator2, 50)
       await toNextEpoch()
       await expectCurrentValidators([validator1, validator3, fixedValidator])
 
@@ -1024,7 +1045,7 @@ describe('StakeManager', () => {
       await staker2.stake(Token.OAS, validator1, '250')
       await toNextEpoch()
 
-      await Promise.all([...Array(50).keys()].map((_) => validator1.slash(validator1)))
+      await slash(validator1, validator1, 50)
       await toNextEpoch()
 
       const acutal = await validator1.getInfo()
@@ -1402,13 +1423,13 @@ describe('StakeManager', () => {
       await toNextEpoch()
       await toNextEpoch()
 
-      await Promise.all([...Array(10).keys()].map((_) => validator1.slash(validator2)))
+      await slash(validator1, validator2, 10)
 
       await toNextEpoch()
       await toNextEpoch()
       await toNextEpoch()
 
-      await Promise.all([...Array(20).keys()].map((_) => validator1.slash(validator2)))
+      await slash(validator1, validator2, 20)
 
       await toNextEpoch()
 
