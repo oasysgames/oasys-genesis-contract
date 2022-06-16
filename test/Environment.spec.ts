@@ -1,5 +1,6 @@
 import { ethers, network } from 'hardhat'
 import { Contract, BigNumber } from 'ethers'
+import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { toWei } from 'web3-utils'
 import { expect } from 'chai'
 
@@ -26,6 +27,7 @@ const expectValues = (actual: EnvironmentValue, expect_: EnvironmentValue) => {
 }
 
 describe('Environment', () => {
+  let accounts: Account[]
   let environment: Contract
   let currentBlock = 0
 
@@ -40,8 +42,13 @@ describe('Environment', () => {
     await toNextEpoch()
   }
 
+  before(async () => {
+    accounts = await ethers.getSigners()
+  })
+
   beforeEach(async () => {
     await network.provider.send('hardhat_reset')
+    await network.provider.send('hardhat_setCoinbase', [accounts[0].address])
     environment = await (await ethers.getContractFactory('Environment')).deploy()
     currentBlock = 0
   })

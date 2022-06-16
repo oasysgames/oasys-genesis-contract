@@ -3,6 +3,8 @@
 /artifacts/build-info
 /artifacts/**/*.dbg.json
 /artifacts/@openzeppelin
+/coverage
+/coverage.json
 
 .DS_Store
 .vscode
