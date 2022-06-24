@@ -26,6 +26,7 @@ contract Allowlist is IAllowlist, Ownable {
      * @param _address Allowed address.
      */
     function addAddress(address _address) external onlyOwner {
+        require(_address != address(0), "zero address.");
         require(!_contains(_allowlist, _address), "already added");
         _allowlist.push(_address);
 

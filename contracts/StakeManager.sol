@@ -137,6 +137,8 @@ contract StakeManager is IStakeManager, System {
         onlyFirstBlock
         onlyCoinbase
     {
+        require(operators.length == counts.length, "length is mismatch.");
+
         uint256 epoch = environment.epoch();
         uint256 total;
         for (uint256 i = 0; i < operators.length; i++) {

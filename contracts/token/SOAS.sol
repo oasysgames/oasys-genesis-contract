@@ -63,6 +63,7 @@ contract SOAS is ERC20 {
         uint256 since,
         uint256 until
     ) external payable {
+        require(to != staking, "cannot mint to staking contract");
         require(claimInfo[to].amount == 0, "already mint");
         require(block.timestamp < since && since < until, "invalid since or until");
         require(msg.value > 0, "no OAS");
@@ -78,6 +79,8 @@ contract SOAS is ERC20 {
      * @param amount Amount of the SOAS.
      */
     function claim(uint256 amount) external {
+        require(amount > 0, "amount is zero");
+
         uint256 currentClaimableOAS = getClaimableOAS(msg.sender) - claimInfo[msg.sender].claimed;
         require(currentClaimableOAS >= amount, "over claimable OAS");
 
@@ -95,6 +98,8 @@ contract SOAS is ERC20 {
      * @param amount Amount of the SOAS.
      */
     function renounce(uint256 amount) external {
+        require(amount > 0, "amount is zero");
+
         ClaimInfo memory info = claimInfo[msg.sender];
         require(info.amount - info.claimed >= amount, "cannot renounce");
 
