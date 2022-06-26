@@ -84,11 +84,10 @@ contract SOAS is ERC20 {
         uint256 currentClaimableOAS = getClaimableOAS(msg.sender) - claimInfo[msg.sender].claimed;
         require(currentClaimableOAS >= amount, "over claimable OAS");
 
+        claimInfo[msg.sender].claimed += amount;
         _burn(msg.sender, amount);
         (bool success, ) = msg.sender.call{ value: amount }(new bytes(0));
         require(success, "OAS transfer failed");
-
-        claimInfo[msg.sender].claimed += amount;
 
         emit Claim(msg.sender, amount);
     }
