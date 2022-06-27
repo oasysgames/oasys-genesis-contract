@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.9;
+pragma solidity ^0.8.12;
 
-import {INFTBridgeMainchain} from "./INFTBridgeMainchain.sol";
-import {INFTBridgeSidechain} from "./INFTBridgeSidechain.sol";
-import {Signers} from "./Signers.sol";
+import { INFTBridgeMainchain } from "./INFTBridgeMainchain.sol";
+import { INFTBridgeSidechain } from "./INFTBridgeSidechain.sol";
+import { Signers } from "./Signers.sol";
 
 contract NFTBridgeRelayer is Signers {
     /**********************

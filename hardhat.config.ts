@@ -1,15 +1,15 @@
-import { HardhatUserConfig } from "hardhat/types";
-import "@nomiclabs/hardhat-waffle";
+import { HardhatUserConfig } from 'hardhat/types'
+import '@nomiclabs/hardhat-waffle'
 
 const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: "0.5.17",
+        version: '0.5.17',
         settings: { optimizer: { enabled: true, runs: 200 } },
       },
       {
-        version: "0.8.9",
+        version: '0.8.12',
         settings: { optimizer: { enabled: true, runs: 200 } },
       },
     ],
@@ -23,6 +23,6 @@ const config: HardhatUserConfig = {
   mocha: {
     timeout: 1000 * 60 * 3, // 3 minutes
   },
-};
+}
 
-export default config;
+export default config
