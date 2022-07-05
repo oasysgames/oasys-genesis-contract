@@ -14,11 +14,11 @@ interface IStakeManager {
      * Events *
      **********/
 
-    event ValidatorActivated(address indexed validator);
-    event ValidatorDeactivated(address indexed validator);
+    event ValidatorActivated(address indexed validator, uint256[] epochs);
+    event ValidatorDeactivated(address indexed validator, uint256[] epochs);
     event ValidatorCommissionRateUpdated(address indexed validator, uint256 rate);
     event ValidatorSlashed(address indexed validator);
-    event ValidatorJailed(address indexed validator, uint256 epoch);
+    event ValidatorJailed(address indexed validator, uint256 until);
     event Staked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
     event Unstaked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
 
@@ -31,10 +31,10 @@ interface IStakeManager {
         address owner;
         // Address used for block signing
         address operator;
-        // Validator status
-        bool active;
-        // Epoch number at which the validator was jailed
-        uint256 jailEpoch;
+        // List of inactive epoch numbers.
+        mapping(uint256 => bool) inactives;
+        // List of jailed epoch numbers.
+        mapping(uint256 => bool) jails;
         // Commission rate last updated epoch
         uint256[] lastCommissionUpdates;
         // Commission rates per epoch
@@ -48,8 +48,6 @@ interface IStakeManager {
         // List of stakers
         address[] stakers;
         mapping(address => bool) stakerExists;
-        // List of epochs joined in creation of block
-        uint256[] epochs;
         // Expected number of block createds per epoch
         mapping(uint256 => uint256) blocks;
         // Number of slashes per epoch
@@ -85,22 +83,9 @@ interface IStakeManager {
     /**
      * Record validators that failed to create blocks.
      * @param operator Validator address.
+     * @param blocks Expected number of block createds.
      */
-    function slash(address operator) external;
-
-    /**
-     * Stores the number of blocks per validator should create at the current epoch.
-     * The value is calculated by the validator that creates the first block of the epoch.
-     * @param operators List of validator address.
-     * @param counts List of blocks per validator.
-     */
-    function updateValidatorBlocks(address[] memory operators, uint256[] memory counts) external;
-
-    /**
-     * Select a validators for the next epoch based on current staking amounts and availability.
-     * This method is called only once in the last block of the epoch.
-     */
-    function updateValidators() external;
+    function slash(address operator, uint256 blocks) external;
 
     /*********************************************
      * Functions for Validator owner or operator *
@@ -122,15 +107,17 @@ interface IStakeManager {
      * Change the validator status to active.
      * Changes will be applied from next epoch.
      * @param validator Validator address.
+     * @param epochs List of epoch numbers to active.
      */
-    function activateValidator(address validator) external;
+    function activateValidator(address validator, uint256[] memory epochs) external;
 
     /**
      * Change the validator status to disable.
      * Changes will be applied from next epoch.
      * @param validator Validator address.
+     * @param epochs List of epoch numbers to inactive.
      */
-    function deactivateValidator(address validator) external;
+    function deactivateValidator(address validator, uint256[] memory epochs) external;
 
     /**
      * Update validator commission rates.
@@ -213,6 +200,21 @@ interface IStakeManager {
         );
 
     /**
+     * Returns validators who create blocks in the next epoch.
+     * @return owners List of addresses for block signing.
+     * @return operators List of validator owner addresses.
+     * @return stakes List of total staked amounts for each validator.
+     */
+    function getNextValidators()
+        external
+        view
+        returns (
+            address[] memory owners,
+            address[] memory operators,
+            uint256[] memory stakes
+        );
+
+    /**
      * Returns addresses of all validators.
      * @return List of validator address.
      */
@@ -231,9 +233,9 @@ interface IStakeManager {
      * @param validator Validator address.
      * @return operator Address used for block signing
      * @return active Validator status.
+     * @return jailed Jailing status.
      * @return stakes Total staked amounts.
      * @return commissionRate Commission rates.
-     * @return jailEpoch Last jailed epoch number.
      */
     function getValidatorInfo(address validator)
         external
@@ -241,9 +243,28 @@ interface IStakeManager {
         returns (
             address operator,
             bool active,
+            bool jailed,
             uint256 stakes,
-            uint256 commissionRate,
-            uint256 jailEpoch
+            uint256 commissionRate
+        );
+
+    /**
+     * Returns the validator information for the specified epoch.
+     * @param validator Validator address.
+     * @param epoch Target epoch number.
+     * @return active Validator status.
+     * @return jailed Jailing status.
+     * @return stakes Total staked amounts.
+     * @return commissionRate Commission rates.
+     */
+    function getValidatorInfo(address validator, uint256 epoch)
+        external
+        view
+        returns (
+            bool active,
+            bool jailed,
+            uint256 stakes,
+            uint256 commissionRate
         );
 
     /**

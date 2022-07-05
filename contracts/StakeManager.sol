@@ -32,8 +32,6 @@ contract StakeManager is IStakeManager, System {
      * Variables *
      *************/
 
-    // List of block creation validators
-    address[] public currentValidators;
     // List of validators
     mapping(address => Validator) public validators;
     address[] public validatorOwners;
@@ -42,8 +40,6 @@ contract StakeManager is IStakeManager, System {
     // List of stakers
     mapping(address => Staker) public stakers;
     address[] public stakerSigners;
-    // Log of update validators
-    mapping(uint256 => address) public validatorUpdates;
 
     /*************
      * Modifiers *
@@ -120,69 +116,18 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function slash(address operator) external validatorExists(operatorToOwner[operator]) onlyCoinbase {
+    function slash(address operator, uint256 blocks) external validatorExists(operatorToOwner[operator]) onlyCoinbase {
+        IEnvironment.EnvironmentValue memory env = environment.value();
+        uint256 epoch = environment.epoch();
         // solhint-disable-next-line reason-string
-        require(environment.epoch() > 1, "not executable in the first epoch.");
+        require(epoch > 1, "not executable in the first epoch.");
 
         Validator storage validator = validators[operatorToOwner[operator]];
-        validator.slash(environment);
+        uint256 until = validator.slash(env, epoch, blocks);
         emit ValidatorSlashed(validator.owner);
-    }
-
-    /**
-     * @inheritdoc IStakeManager
-     */
-    function updateValidatorBlocks(address[] memory operators, uint256[] memory counts)
-        external
-        onlyFirstBlock
-        onlyCoinbase
-    {
-        require(operators.length == counts.length, "length is mismatch.");
-
-        uint256 epoch = environment.epoch();
-        uint256 total;
-        for (uint256 i = 0; i < operators.length; i++) {
-            validators[operatorToOwner[operators[i]]].blocks[epoch] = counts[i];
-            total += counts[i];
+        if (until > 0) {
+            emit ValidatorJailed(validator.owner, until);
         }
-        require(total == environment.value().epochPeriod, "block count is mismatch.");
-    }
-
-    /**
-     * @inheritdoc IStakeManager
-     */
-    function updateValidators() external onlyLastBlock onlyCoinbase {
-        uint256 epoch = environment.epoch();
-        require(validatorUpdates[epoch] == address(0), "already updated.");
-
-        IEnvironment.EnvironmentValue memory env = environment.value();
-
-        // Jailed validators
-        for (uint256 i = 0; i < currentValidators.length; i++) {
-            Validator storage validator = validators[operatorToOwner[currentValidators[i]]];
-            if (validator.jailEpoch == epoch || validator.slashes[epoch] < env.jailThreshold) continue;
-            validator.jailEpoch = epoch;
-            emit ValidatorJailed(validator.owner, epoch);
-        }
-
-        // Select validators for the next epoch
-        address[] memory tmpValidators = new address[](validatorOwners.length);
-        uint256 count = 0;
-        for (uint256 i = 0; i < validatorOwners.length; i++) {
-            Validator storage validator = validators[validatorOwners[i]];
-            if (validator.isCandidates(environment)) {
-                validator.epochs.push(epoch + 1);
-                tmpValidators[count] = validator.operator;
-                count++;
-            }
-        }
-
-        currentValidators = new address[](count);
-        for (uint256 i = 0; i < count; i++) {
-            currentValidators[i] = tmpValidators[i];
-        }
-
-        validatorUpdates[epoch] = msg.sender;
     }
 
     /*********************************************
@@ -211,25 +156,27 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function activateValidator(address validator)
+    function activateValidator(address validator, uint256[] memory epochs)
         external
         onlyValidatorOwnerOrOperator(validator)
         validatorExists(validator)
+        onlyNotLastBlock
     {
-        validators[validator].activate();
-        emit ValidatorActivated(validator);
+        validators[validator].activate(environment.epoch(), epochs);
+        emit ValidatorActivated(validator, epochs);
     }
 
     /**
      * @inheritdoc IStakeManager
      */
-    function deactivateValidator(address validator)
+    function deactivateValidator(address validator, uint256[] memory epochs)
         external
         onlyValidatorOwnerOrOperator(validator)
         validatorExists(validator)
+        onlyNotLastBlock
     {
-        validators[validator].deactivate();
-        emit ValidatorDeactivated(validator);
+        validators[validator].deactivate(environment.epoch(), epochs);
+        emit ValidatorDeactivated(validator, epochs);
     }
 
     /**
@@ -319,18 +266,22 @@ contract StakeManager is IStakeManager, System {
             uint256[] memory stakes
         )
     {
-        owners = new address[](currentValidators.length);
-        operators = new address[](currentValidators.length);
-        stakes = new uint256[](currentValidators.length);
+        (owners, operators, stakes) = _getValidators(environment.value(), environment.epoch());
+    }
 
-        uint256 epoch = environment.epoch();
-        if (environment.isLastBlock()) epoch++;
-
-        for (uint256 i = 0; i < currentValidators.length; i++) {
-            owners[i] = operatorToOwner[currentValidators[i]];
-            operators[i] = currentValidators[i];
-            stakes[i] = validators[owners[i]].getTotalStake(epoch);
-        }
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function getNextValidators()
+        external
+        view
+        returns (
+            address[] memory owners,
+            address[] memory operators,
+            uint256[] memory stakes
+        )
+    {
+        (owners, operators, stakes) = _getValidators(environment.nextValue(), environment.epoch() + 1);
     }
 
     /**
@@ -369,18 +320,41 @@ contract StakeManager is IStakeManager, System {
         returns (
             address operator,
             bool active,
+            bool jailed,
             uint256 stakes,
-            uint256 commissionRate,
-            uint256 jailEpoch
+            uint256 commissionRate
+        )
+    {
+        Validator storage _validator = validators[validator];
+        uint256 epoch = environment.epoch();
+        return (
+            _validator.operator,
+            !_validator.isInactive(epoch),
+            _validator.isJailed(epoch),
+            _validator.getTotalStake(epoch),
+            _validator.getCommissionRate(epoch)
+        );
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function getValidatorInfo(address validator, uint256 epoch)
+        external
+        view
+        returns (
+            bool active,
+            bool jailed,
+            uint256 stakes,
+            uint256 commissionRate
         )
     {
         Validator storage _validator = validators[validator];
         return (
-            _validator.operator,
-            _validator.active,
-            _validator.getTotalStake(environment.epoch()),
-            _validator.getCommissionRate(environment.epoch()),
-            _validator.jailEpoch
+            !_validator.isInactive(epoch),
+            _validator.isJailed(epoch),
+            _validator.getTotalStake(epoch),
+            _validator.getCommissionRate(epoch)
         );
     }
 
@@ -503,5 +477,41 @@ contract StakeManager is IStakeManager, System {
         returns (uint256 blocks, uint256 slashes)
     {
         (blocks, slashes) = validators[validator].getBlockAndSlashes(epoch > 0 ? epoch : environment.epoch());
+    }
+
+    /*********************
+     * Private Functions *
+     *********************/
+
+    function _getValidators(IEnvironment.EnvironmentValue memory env, uint256 epoch)
+        internal
+        view
+        returns (
+            address[] memory owners,
+            address[] memory operators,
+            uint256[] memory stakes
+        )
+    {
+        address[] memory _owners = new address[](validatorOwners.length);
+        uint256 count = 0;
+
+        for (uint256 idx = 0; idx < validatorOwners.length; idx++) {
+            Validator storage validator = validators[validatorOwners[idx]];
+            if (validator.inactives[epoch]) continue;
+            if (validator.isJailed(epoch)) continue;
+            if (validator.getTotalStake(epoch) < env.validatorThreshold) continue;
+            _owners[count] = validatorOwners[idx];
+            count++;
+        }
+
+        owners = new address[](count);
+        operators = new address[](count);
+        stakes = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            owners[i] = _owners[i];
+            Validator storage validator = validators[_owners[i]];
+            operators[i] = validator.operator;
+            stakes[i] = validator.getTotalStake(epoch);
+        }
     }
 }

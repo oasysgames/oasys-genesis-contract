@@ -89,8 +89,10 @@ contract Environment is IEnvironment, System {
      * @inheritdoc IEnvironment
      */
     function nextValue() external view returns (EnvironmentValue memory) {
+        EnvironmentValue memory current = value();
         EnvironmentValue storage next = _getNext();
-        return next.started(block.number + 1) ? next : _getCurrent();
+        uint256 nextStartBlock = current.startBlock + (epoch() - current.startEpoch + 1) * current.epochPeriod;
+        return next.started(nextStartBlock) ? next : current;
     }
 
     /**

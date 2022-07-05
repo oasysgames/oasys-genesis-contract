@@ -23,7 +23,6 @@ library Validator {
         require(validator.owner == address(0), "already joined.");
 
         validator.owner = msg.sender;
-        validator.active = true;
         updateOperator(validator, operator);
     }
 
@@ -34,12 +33,20 @@ library Validator {
         validator.operator = operator;
     }
 
-    function activate(IStakeManager.Validator storage validator) internal {
-        validator.active = true;
+    function activate(
+        IStakeManager.Validator storage validator,
+        uint256 epoch,
+        uint256[] memory epochs
+    ) internal {
+        _updateInactives(validator, epoch, epochs, false);
     }
 
-    function deactivate(IStakeManager.Validator storage validator) internal {
-        validator.active = false;
+    function deactivate(
+        IStakeManager.Validator storage validator,
+        uint256 epoch,
+        uint256[] memory epochs
+    ) internal {
+        _updateInactives(validator, epoch, epochs, true);
     }
 
     function updateCommissionRate(
@@ -84,26 +91,37 @@ library Validator {
         }
     }
 
-    function slash(IStakeManager.Validator storage validator, IEnvironment environment) internal {
-        validator.slashes[environment.epoch()] += 1;
+    function slash(
+        IStakeManager.Validator storage validator,
+        IEnvironment.EnvironmentValue memory env,
+        uint256 epoch,
+        uint256 blocks
+    ) internal returns (uint256 until) {
+        if (validator.blocks[epoch] == 0) {
+            validator.blocks[epoch] = blocks;
+        }
+
+        uint256 slashes = validator.slashes[epoch] + 1;
+        validator.slashes[epoch] = slashes;
+        if (slashes >= env.jailThreshold && !validator.jails[epoch + 1]) {
+            until = epoch + env.jailPeriod;
+            while (epoch < until) {
+                epoch++;
+                validator.jails[epoch] = true;
+            }
+        }
     }
 
     /******************
      * View Functions *
      ******************/
 
-    function isCandidates(IStakeManager.Validator storage validator, IEnvironment environment)
-        internal
-        view
-        returns (bool)
-    {
-        if (!validator.active) return false;
+    function isJailed(IStakeManager.Validator storage validator, uint256 epoch) internal view returns (bool) {
+        return validator.jails[epoch];
+    }
 
-        IEnvironment.EnvironmentValue memory env = environment.value();
-        uint256 epoch = environment.epoch();
-        if (validator.jailEpoch > 0 && epoch - validator.jailEpoch < env.jailPeriod) return false;
-        if (getTotalStake(validator, epoch + 1) < env.validatorThreshold) return false;
-        return true;
+    function isInactive(IStakeManager.Validator storage validator, uint256 epoch) internal view returns (bool) {
+        return validator.inactives[epoch];
     }
 
     function getCommissionRate(IStakeManager.Validator storage validator, uint256 epoch)
@@ -123,12 +141,10 @@ library Validator {
         IEnvironment.EnvironmentValue memory env,
         uint256 epoch
     ) internal view returns (uint256) {
+        if (isInactive(validator, epoch) || isJailed(validator, epoch)) return 0;
+
         uint256 _stake = getTotalStake(validator, epoch);
         if (_stake == 0) return 0;
-
-        uint256 blocks = validator.blocks[epoch];
-        uint256 slashes = validator.slashes[epoch];
-        if (blocks == 0 || slashes >= blocks) return 0;
 
         uint256 rewards = (_stake *
             Math.percent(env.rewardRate, Constants.MAX_REWARD_RATE, Constants.REWARD_PRECISION)) /
@@ -141,7 +157,13 @@ library Validator {
             Constants.REWARD_PRECISION
         );
         rewards /= 10**Constants.REWARD_PRECISION;
-        return Math.share(rewards, blocks - slashes, blocks, Constants.REWARD_PRECISION);
+
+        uint256 slashes = validator.slashes[epoch];
+        if (slashes > 0) {
+            uint256 blocks = validator.blocks[epoch];
+            rewards = Math.share(rewards, blocks - slashes, blocks, Constants.REWARD_PRECISION);
+        }
+        return rewards;
     }
 
     function getRewardsWithoutCommissions(
@@ -195,5 +217,23 @@ library Validator {
         returns (uint256, uint256)
     {
         return (validator.blocks[epoch], validator.slashes[epoch]);
+    }
+
+    /*********************
+     * Private Functions *
+     *********************/
+
+    function _updateInactives(
+        IStakeManager.Validator storage validator,
+        uint256 epoch,
+        uint256[] memory epochs,
+        bool status
+    ) private {
+        for (uint256 i = 0; i < epochs.length; i++) {
+            uint256 _epoch = epochs[i];
+            if (_epoch > epoch && validator.inactives[_epoch] != status) {
+                validator.inactives[_epoch] = status;
+            }
+        }
     }
 }
