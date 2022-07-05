@@ -5,6 +5,15 @@ pragma solidity ^0.8.12;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import { IAllowlist } from "./IAllowlist.sol";
 
+// Tried to add a zero address.
+error EmptyAddress();
+
+// Address already added.
+error AlreadyAdded();
+
+// Address not found.
+error NotFound();
+
 /**
  * @title Allowlist
  * @dev Allowlist manages the allowed addresses.
@@ -27,8 +36,8 @@ contract Allowlist is IAllowlist, Ownable {
      * @param _address Allowed address.
      */
     function addAddress(address _address) external onlyOwner {
-        require(_address != address(0), "zero address.");
-        require(!_contains(_address), "already added");
+        if (_address == address(0)) revert EmptyAddress();
+        if (_contains(_address)) revert AlreadyAdded();
         _allowlist.push(_address);
         _ids[_address] = _allowlist.length;
 
@@ -40,7 +49,7 @@ contract Allowlist is IAllowlist, Ownable {
      * @param _address Removed address.
      */
     function removeAddress(address _address) external onlyOwner {
-        require(_contains(_address), "address not found");
+        if (!_contains(_address)) revert NotFound();
         uint256 length = _allowlist.length;
         if (length > 1) {
             uint256 id = _ids[_address];

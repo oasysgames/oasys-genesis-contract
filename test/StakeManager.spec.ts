@@ -177,7 +177,7 @@ describe('StakeManager', () => {
 
   it('initialize()', async () => {
     await initialize()
-    await expect(initialize()).to.revertedWith('already initialized.')
+    await expect(initialize()).to.revertedWith('AlreadyInitialized()')
   })
 
   describe('validator owner or operator functions', () => {
@@ -199,20 +199,20 @@ describe('StakeManager', () => {
 
     it('joinValidator()', async () => {
       let tx = validator.joinValidator(zeroAddress)
-      await expect(tx).to.revertedWith('not allowed.')
+      await expect(tx).to.revertedWith('UnauthorizedValidator()')
 
       await allowAddress(validator)
 
       tx = validator.joinValidator(zeroAddress)
-      await expect(tx).to.revertedWith('operator is zero address.')
+      await expect(tx).to.revertedWith('EmptyAddress()')
 
       tx = validator.joinValidator(owner.address)
-      await expect(tx).to.revertedWith('operator is same as owner.')
+      await expect(tx).to.revertedWith('SameAsOwner()')
 
       await validator.joinValidator()
 
       tx = validator.joinValidator()
-      await expect(tx).to.revertedWith('already joined.')
+      await expect(tx).to.revertedWith('AlreadyJoined()')
     })
 
     it('updateOperator()', async () => {
@@ -222,10 +222,10 @@ describe('StakeManager', () => {
       await validator.joinValidator()
 
       let tx = validator.updateOperator(zeroAddress)
-      await expect(tx).to.revertedWith('operator is zero address.')
+      await expect(tx).to.revertedWith('EmptyAddress()')
 
       tx = validator.updateOperator(owner.address)
-      await expect(tx).to.revertedWith('operator is same as owner.')
+      await expect(tx).to.revertedWith('SameAsOwner()')
 
       // from owner
       await validator.updateOperator(newOperator.address)
@@ -233,11 +233,11 @@ describe('StakeManager', () => {
 
       // from operator
       tx = validator.updateOperator(operator.address, operator)
-      await expect(tx).to.revertedWith('validator does not exist.')
+      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
 
       // from attacker
       tx = validator.updateOperator(attacker.address, attacker)
-      await expect(tx).to.revertedWith('validator does not exist.')
+      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
     })
 
     it('deactivateValidator() and activateValidator()', async () => {
@@ -336,10 +336,10 @@ describe('StakeManager', () => {
 
       // from attacker
       let tx = validator.deactivateValidator([await getEpoch(1)], attacker)
-      await expect(tx).to.revertedWith('you are not owner or operator.')
+      await expect(tx).to.revertedWith('UnauthorizedSender()')
 
       tx = validator.activateValidator([await getEpoch(1)], attacker)
-      await expect(tx).to.revertedWith('you are not owner or operator.')
+      await expect(tx).to.revertedWith('UnauthorizedSender()')
     })
 
     it('updateCommissionRate()', async () => {
@@ -356,11 +356,11 @@ describe('StakeManager', () => {
 
       // from operator
       let tx = validator.updateCommissionRate(10, operator)
-      await expect(tx).to.revertedWith('validator does not exist.')
+      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
 
       // from attacker
       tx = validator.updateCommissionRate(10, attacker)
-      await expect(tx).to.revertedWith('validator does not exist.')
+      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
     })
 
     it('claimCommissions()', async () => {
@@ -393,7 +393,7 @@ describe('StakeManager', () => {
 
       // from attacker
       const tx = validator.claimCommissions(attacker)
-      await expect(tx).to.revertedWith('you are not owner or operator.')
+      await expect(tx).to.revertedWith('UnauthorizedSender()')
     })
   })
 

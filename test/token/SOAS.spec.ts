@@ -83,6 +83,6 @@ describe('SOAS', () => {
 
     // insufficient balance.
     await setBlockTimestamp('2101/01/01')
-    await expect(soas.connect(user).claim(toWei('0.00001', 'ether'))).to.revertedWith('over claimable OAS')
+    await expect(soas.connect(user).claim(toWei('0.00001', 'ether'))).to.revertedWith('OverAmount()')
   })
 })

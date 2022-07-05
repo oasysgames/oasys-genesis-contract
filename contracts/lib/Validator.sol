@@ -9,6 +9,18 @@ import { Token } from "./Token.sol";
 import { IEnvironment } from "../IEnvironment.sol";
 import { IStakeManager } from "../IStakeManager.sol";
 
+// Validator is already joined.
+error AlreadyJoined();
+
+// Operator is zero address.
+error EmptyAddress();
+
+// Operator is same as owner.
+error SameAsOwner();
+
+// Commission rate is too large.
+error OverRate();
+
 /**
  * @title Validator
  */
@@ -20,15 +32,15 @@ library Validator {
      ********************/
 
     function join(IStakeManager.Validator storage validator, address operator) internal {
-        require(validator.owner == address(0), "already joined.");
+        if (validator.owner != address(0)) revert AlreadyJoined();
 
         validator.owner = msg.sender;
         updateOperator(validator, operator);
     }
 
     function updateOperator(IStakeManager.Validator storage validator, address operator) internal {
-        require(operator != address(0), "operator is zero address.");
-        require(operator != validator.owner, "operator is same as owner.");
+        if (operator == address(0)) revert EmptyAddress();
+        if (operator == validator.owner) revert SameAsOwner();
 
         validator.operator = operator;
     }
@@ -54,7 +66,8 @@ library Validator {
         IEnvironment environment,
         uint256 newRate
     ) internal {
-        require(newRate <= Constants.MAX_COMMISSION_RATE, "must be less than 100.");
+        if (newRate > Constants.MAX_COMMISSION_RATE) revert OverRate();
+
         validator.lastCommissionUpdates.set(validator.commissionRates, environment.epoch() + 1, newRate);
     }
 

@@ -112,7 +112,7 @@ interface IStakeManager {
     function activateValidator(address validator, uint256[] memory epochs) external;
 
     /**
-     * Change the validator status to disable.
+     * Change validator status to disabled.
      * Changes will be applied from next epoch.
      * @param validator Validator address.
      * @param epochs List of epoch numbers to inactive.

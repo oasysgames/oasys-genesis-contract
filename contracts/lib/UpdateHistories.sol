@@ -36,10 +36,11 @@ library UpdateHistories {
     ) internal returns (uint256) {
         extend(epochs, values, nextEpoch);
 
-        uint256 balance = values[epochs.length - 1];
+        uint256 length = epochs.length;
+        uint256 balance = values[length - 1];
         value = value <= balance ? value : balance;
         if (value > 0) {
-            values[epochs.length - 1] -= value;
+            values[length - 1] -= value;
         }
         return value;
     }
@@ -49,9 +50,10 @@ library UpdateHistories {
         uint256[] storage values,
         uint256 epoch
     ) internal view returns (uint256) {
-        if (epochs.length == 0 || epochs[0] > epoch) return 0;
-        if (epochs[epochs.length - 1] <= epoch) return values[epochs.length - 1];
-        uint256 idx = sBinarySearch(epochs, epoch, 0, epochs.length);
+        uint256 length = epochs.length;
+        if (length == 0 || epochs[0] > epoch) return 0;
+        if (epochs[length - 1] <= epoch) return values[length - 1];
+        uint256 idx = sBinarySearch(epochs, epoch, 0, length);
         return values[idx];
     }
 
@@ -60,8 +62,9 @@ library UpdateHistories {
         IEnvironment.EnvironmentValue[] memory values,
         uint256 epoch
     ) internal pure returns (IEnvironment.EnvironmentValue memory) {
-        if (epochs[epochs.length - 1] <= epoch) return values[epochs.length - 1];
-        uint256 idx = mBinarySearch(epochs, epoch, 0, epochs.length);
+        uint256 length = epochs.length;
+        if (epochs[length - 1] <= epoch) return values[length - 1];
+        uint256 idx = mBinarySearch(epochs, epoch, 0, length);
         return values[idx];
     }
 

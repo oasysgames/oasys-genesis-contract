@@ -6,6 +6,12 @@ import { System } from "./System.sol";
 import { IEnvironment } from "./IEnvironment.sol";
 import { EnvironmentValue as EnvironmentValueLib } from "./lib/EnvironmentValue.sol";
 
+// Not executable in the last block of epoch.
+error OnlyNotLastBlock();
+
+// Epoch must be the future.
+error PastEpoch();
+
 /**
  * @title Environment
  * @dev The Environment contract has parameters for proof-of-stake.
@@ -38,9 +44,8 @@ contract Environment is IEnvironment, System {
      * @inheritdoc IEnvironment
      */
     function updateValue(EnvironmentValue memory newValue) external onlyCoinbase {
-        // solhint-disable-next-line reason-string
-        require(!isLastBlock(), "not executable in the last block of epoch.");
-        require(newValue.startEpoch > epoch(), "startEpoch must be future.");
+        if (isLastBlock()) revert OnlyNotLastBlock();
+        if (newValue.startEpoch <= epoch()) revert PastEpoch();
 
         EnvironmentValue storage next = _getNext();
         if (next.started(block.number)) {
@@ -66,7 +71,7 @@ contract Environment is IEnvironment, System {
     /**
      * @inheritdoc IEnvironment
      */
-    function isFirstBlock() public view returns (bool) {
+    function isFirstBlock() external view returns (bool) {
         return (block.number) % value().epochPeriod == 0;
     }
 
@@ -123,11 +128,7 @@ contract Environment is IEnvironment, System {
      * @return Environment value.
      */
     function _getNext() internal view returns (EnvironmentValue storage) {
-        uint256 length = values.length;
-        if (length == 1) {
-            return values[0];
-        }
-        return values[length - 1];
+        return values[values.length - 1];
     }
 
     /**

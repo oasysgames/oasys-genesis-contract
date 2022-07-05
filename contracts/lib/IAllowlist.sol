@@ -11,8 +11,8 @@ interface IAllowlist {
      * Events *
      **********/
 
-    event AllowlistAdded(address _address);
-    event AllowlistRemoved(address _address);
+    event AllowlistAdded(address indexed _address);
+    event AllowlistRemoved(address indexed _address);
 
     /********************
      * Public Functions *

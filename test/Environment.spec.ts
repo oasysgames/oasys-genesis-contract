@@ -55,7 +55,7 @@ describe('Environment', () => {
 
   it('initialize()', async () => {
     await initialize()
-    await expect(initialize()).to.revertedWith('already initialized.')
+    await expect(initialize()).to.revertedWith('AlreadyInitialized()')
   })
 
   describe('updateValue()', async () => {
@@ -63,7 +63,7 @@ describe('Environment', () => {
       await initialize()
 
       const tx = environment.updateValue(initialValue)
-      await expect(tx).to.revertedWith('startEpoch must be future.')
+      await expect(tx).to.revertedWith('PastEpoch()')
     })
   })
 
@@ -101,7 +101,7 @@ describe('Environment', () => {
 
     it('update in last block of epoch', async () => {
       await expectEpoch(100, 198, 2)
-      await expect(updateValue(3, 150)).to.revertedWith('last block of epoch.')
+      await expect(updateValue(3, 150)).to.revertedWith('OnlyNotLastBlock()')
     })
 
     it('update in first block of epoch', async () => {

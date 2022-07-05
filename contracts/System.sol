@@ -2,6 +2,12 @@
 
 pragma solidity ^0.8.12;
 
+// The contract has already been initialized.
+error AlreadyInitialized();
+
+// Sender must be block producer.
+error OnlyBlockProducer();
+
 /**
  * @title System
  */
@@ -12,7 +18,7 @@ abstract contract System {
      * @dev Modifier requiring the initialize function to be called only once.
      */
     modifier initializer() {
-        require(!initialized, "already initialized.");
+        if (initialized) revert AlreadyInitialized();
         initialized = true;
         _;
     }
@@ -21,7 +27,7 @@ abstract contract System {
      * @dev Modifier requiring the sender to be validator of created this block.
      */
     modifier onlyCoinbase() {
-        require(msg.sender == block.coinbase, "sender must be block producer.");
+        if (msg.sender != block.coinbase) revert OnlyBlockProducer();
         _;
     }
 }

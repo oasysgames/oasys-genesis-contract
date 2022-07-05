@@ -3,6 +3,29 @@ pragma solidity ^0.8.12;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
+error InvalidDestination();
+
+// SOAS is already minted.
+error AlreadyMinted();
+
+// Invalid since or until.
+error InvalidClaimPeriod();
+
+// OAS is zero.
+error NoAmount();
+
+// Over claimable OAS.
+error OverAmount();
+
+// OAS transfer failed.
+error TransferFailed();
+
+// Cannot renounce.
+error CannotRenounce();
+
+// Only staking contracts or burn are allowed.
+error UnauthorizedTransfer();
+
 /**
  * @title SOAS
  * @dev The SOAS is non-transferable but stakable token.
@@ -16,8 +39,8 @@ contract SOAS is ERC20 {
     struct ClaimInfo {
         uint256 amount;
         uint256 claimed;
-        uint256 since;
-        uint256 until;
+        uint64 since;
+        uint64 until;
         address from;
     }
 
@@ -59,13 +82,13 @@ contract SOAS is ERC20 {
      */
     function mint(
         address to,
-        uint256 since,
-        uint256 until
+        uint64 since,
+        uint64 until
     ) external payable {
-        require(to != staking, "cannot mint to staking contract");
-        require(claimInfo[to].amount == 0, "already mint");
-        require(block.timestamp < since && since < until, "invalid since or until");
-        require(msg.value > 0, "no OAS");
+        if (to == address(0) || to == staking) revert InvalidDestination();
+        if (claimInfo[to].amount != 0) revert AlreadyMinted();
+        if (since <= block.timestamp || since >= until) revert InvalidClaimPeriod();
+        if (msg.value == 0) revert NoAmount();
 
         _mint(to, msg.value);
         claimInfo[to] = ClaimInfo(msg.value, 0, since, until, msg.sender);
@@ -81,12 +104,12 @@ contract SOAS is ERC20 {
         require(amount > 0, "amount is zero");
 
         uint256 currentClaimableOAS = getClaimableOAS(msg.sender) - claimInfo[msg.sender].claimed;
-        require(currentClaimableOAS >= amount, "over claimable OAS");
+        if (amount > currentClaimableOAS) revert OverAmount();
 
         claimInfo[msg.sender].claimed += amount;
         _burn(msg.sender, amount);
-        (bool success, ) = msg.sender.call{ value: amount }(new bytes(0));
-        require(success, "OAS transfer failed");
+        (bool success, ) = msg.sender.call{ value: amount }("");
+        if (!success) revert TransferFailed();
 
         emit Claim(msg.sender, amount);
     }
@@ -99,11 +122,11 @@ contract SOAS is ERC20 {
         require(amount > 0, "amount is zero");
 
         ClaimInfo memory info = claimInfo[msg.sender];
-        require(info.amount - info.claimed >= amount, "cannot renounce");
+        if (amount > info.amount - info.claimed) revert OverAmount();
 
         _burn(msg.sender, amount);
-        (bool success, ) = info.from.call{ value: amount }(new bytes(0));
-        require(success, "OAS transfer failed");
+        (bool success, ) = info.from.call{ value: amount }("");
+        if (!success) revert TransferFailed();
 
         emit Renounce(msg.sender, amount);
     }
@@ -147,6 +170,8 @@ contract SOAS is ERC20 {
         address to,
         uint256 amount
     ) internal view override {
-        require(from == address(0) || to == address(0) || from == staking || to == staking, "cannot trasfer");
+        if (!(from == address(0) || to == address(0) || from == staking || to == staking)) {
+            revert UnauthorizedTransfer();
+        }
     }
 }
