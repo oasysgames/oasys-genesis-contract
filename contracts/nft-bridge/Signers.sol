@@ -14,6 +14,7 @@ contract Signers {
      * Contract Variables *
      **********************/
 
+    uint256 public nonce;
     address[] private signers;
     uint256 public threshold;
 
@@ -92,13 +93,18 @@ contract Signers {
      */
     function addSigner(address _address, bytes memory signatures) external {
         bytes32 _hash = keccak256(
-            abi.encodeWithSelector(Signers.addSigner.selector, _address)
+            abi.encodePacked(
+                nonce,
+                address(this),
+                abi.encodeWithSelector(Signers.addSigner.selector, _address)
+            )
         );
         require(verifySignatures(_hash, signatures), "Invalid signatures");
 
         require(!_contains(signers, _address), "already added");
         signers.push(_address);
 
+        nonce++;
         emit SignerAdded(_address);
     }
 
@@ -108,7 +114,11 @@ contract Signers {
      */
     function removeSigner(address _address, bytes memory signatures) external {
         bytes32 _hash = keccak256(
-            abi.encodeWithSelector(Signers.addSigner.selector, _address)
+            abi.encodePacked(
+                nonce,
+                address(this),
+                abi.encodeWithSelector(Signers.addSigner.selector, _address)
+            )
         );
         require(verifySignatures(_hash, signatures), "Invalid signatures");
 
@@ -125,6 +135,7 @@ contract Signers {
         }
         signers.pop();
 
+        nonce++;
         emit SignerRemoved(_address);
     }
 
@@ -140,13 +151,21 @@ contract Signers {
         }
 
         bytes32 _hash = keccak256(
-            abi.encodeWithSelector(Signers.updateThreshold.selector, _threshold)
+            abi.encodePacked(
+                nonce,
+                address(this),
+                abi.encodeWithSelector(
+                    Signers.updateThreshold.selector,
+                    _threshold
+                )
+            )
         );
         require(verifySignatures(_hash, signatures), "Invalid signatures");
 
         require(signers.length >= _threshold, "Signer shortage.");
         threshold = _threshold;
 
+        nonce++;
         emit ThresholdUpdated(_threshold);
     }
 
