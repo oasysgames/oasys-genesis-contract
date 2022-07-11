@@ -124,7 +124,7 @@ contract Signers {
      */
     function removeSigner(address _address, bytes memory signatures) external {
         bytes32 _hash = keccak256(
-            abi.encodeWithSelector(Signers.addSigner.selector, _address)
+            abi.encodeWithSelector(Signers.removeSigner.selector, _address)
         );
         require(verifySignatures(_hash, signatures), "Invalid signatures");
 
