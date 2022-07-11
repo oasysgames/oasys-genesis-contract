@@ -16,6 +16,7 @@ contract Signers {
 
     address[] private signers;
     uint256 public threshold;
+    mapping(bytes32 => uint256) public nonces;
 
     /***************
      * Constructor *
@@ -40,14 +41,21 @@ contract Signers {
 
     function verifySignatures(bytes32 _hash, bytes memory signatures)
         public
-        view
         returns (bool)
     {
         uint256 signatureCount = signatures.length / 65;
         uint256 signerCount = 0;
         address lastSigner = address(0);
+        address to = address(this);
+        uint256 nonce = nonces[_hash];
         for (uint256 i = 0; i < signatureCount; i++) {
-            address _signer = recoverSigner(_hash, signatures, i * 65);
+            address _signer = recoverSigner(
+                _hash,
+                to,
+                nonce,
+                signatures,
+                i * 65
+            );
             if (_contains(signers, _signer)) {
                 signerCount++;
             }
@@ -56,11 +64,14 @@ contract Signers {
             lastSigner = _signer;
         }
 
+        nonces[_hash] = nonce + 1;
         return signerCount >= threshold;
     }
 
     function recoverSigner(
         bytes32 _hash,
+        address to,
+        uint256 nonce,
         bytes memory signatures,
         uint256 index
     ) private pure returns (address) {
@@ -81,7 +92,12 @@ contract Signers {
         require(v == 27 || v == 28, "v must be 27 or 28");
 
         _hash = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", _hash)
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n84",
+                _hash,
+                to,
+                nonce
+            )
         );
         return ecrecover(_hash, v, r, s);
     }
