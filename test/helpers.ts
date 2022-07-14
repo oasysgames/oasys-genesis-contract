@@ -1,7 +1,9 @@
+import web3 from 'web3'
 import { network } from 'hardhat'
 import { Contract, BigNumber } from 'ethers'
 import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { toWei, fromWei, toDecimal } from 'web3-utils'
+import { toBuffer } from 'ethereumjs-util'
 import { expect } from 'chai'
 
 interface EnvironmentValue {
@@ -208,6 +210,17 @@ const fromEther = (ether: string) => BigNumber.from(toWei(ether))
 
 const toBNWei = (ether: string) => BigNumber.from(toWei(ether))
 
+const makeSignature = async (signer: Account, hash: string, chainid: number): Promise<string> => {
+  const values = [
+    { type: 'bytes32', value: hash },
+    { type: 'uint256', value: String(chainid) },
+  ]
+  const msg = web3.utils.encodePacked(...values)
+  return await signer.signMessage(toBuffer(msg!))
+}
+
+const chainid = network.config.chainId!
+
 const zeroAddress = '0x0000000000000000000000000000000000000000'
 
 const Token = { OAS: 0, wOAS: 1, sOAS: 2 }
@@ -227,6 +240,8 @@ export {
   mining,
   fromEther,
   toBNWei,
+  makeSignature,
+  chainid,
   zeroAddress,
   Token,
   WOASAddress,
