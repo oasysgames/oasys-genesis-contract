@@ -155,6 +155,13 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
     }
 
     /**
+     * Prohibit the direct transfer of ownership.
+     */
+    function transferOwnership(address newOwner) public override {
+        revert("Transfer is prohibited.");
+    }
+
+    /**
      * Prohibit the renonce of ownership.
      */
     function renounceOwnership() public override {

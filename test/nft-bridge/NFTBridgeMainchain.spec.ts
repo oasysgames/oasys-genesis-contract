@@ -258,6 +258,11 @@ describe('NFTBridgeMainchain', () => {
     })
   })
 
+  it('transferOwnership()', async () => {
+    const tx = bridge.transferOwnership(zeroAddress)
+    await expect(tx).to.be.revertedWith('Transfer is prohibited.')
+  })
+
   it('renounceOwnership()', async () => {
     const tx = bridge.renounceOwnership()
     await expect(tx).to.be.revertedWith('Not renounceable.')
