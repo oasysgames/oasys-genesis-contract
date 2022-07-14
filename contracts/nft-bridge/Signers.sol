@@ -117,7 +117,7 @@ contract Signers {
             abi.encodePacked(
                 nonce,
                 address(this),
-                abi.encodeWithSelector(Signers.addSigner.selector, _address)
+                abi.encodeWithSelector(Signers.removeSigner.selector, _address)
             )
         );
         require(verifySignatures(_hash, signatures), "Invalid signatures");
