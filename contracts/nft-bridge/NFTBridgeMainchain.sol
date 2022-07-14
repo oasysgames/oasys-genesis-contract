@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import {INFTBridgeMainchain} from "./INFTBridgeMainchain.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import { INFTBridgeMainchain } from "./INFTBridgeMainchain.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
     /**********************
@@ -75,13 +75,17 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         require(mainInfo.mainTo == address(0), "already rejected");
 
         mainInfo.mainTo = mainInfo.mainFrom;
-        IERC721(mainInfo.mainchainERC721).transferFrom(
-            address(this),
-            mainInfo.mainTo,
-            mainInfo.tokenId
-        );
-
-        emit DepositeRejected(depositIndex);
+        try
+            IERC721(mainInfo.mainchainERC721).transferFrom(
+                address(this),
+                mainInfo.mainTo,
+                mainInfo.tokenId
+            )
+        {
+            emit DepositeRejected(depositIndex);
+        } catch {
+            emit DepositeRejectFailed(depositIndex);
+        }
     }
 
     /**

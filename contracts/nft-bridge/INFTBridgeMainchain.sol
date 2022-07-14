@@ -17,6 +17,8 @@ interface INFTBridgeMainchain {
 
     event DepositeRejected(uint256 indexed depositIndex);
 
+    event DepositeRejectFailed(uint256 indexed depositIndex);
+
     event WithdrawalFinalized(
         uint256 indexed depositIndex,
         uint256 indexed sidechainId,
