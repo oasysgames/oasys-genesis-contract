@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import {INFTBridgeSidechain} from "./INFTBridgeSidechain.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {SidechainERC721} from "./SidechainERC721.sol";
+import { INFTBridgeSidechain } from "./INFTBridgeSidechain.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { SidechainERC721 } from "./SidechainERC721.sol";
 
 contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
     /**********************

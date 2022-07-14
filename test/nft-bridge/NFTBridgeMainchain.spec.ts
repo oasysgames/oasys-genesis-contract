@@ -65,9 +65,9 @@ describe('NFTBridgeMainchain', () => {
     return token.connect(deployer).mint(user.address, tokenId)
   }
 
-  const deposit = async () => {
+  const deposit = async (_sideTo?: string) => {
     await token.connect(user).approve(bridge.address, tokenId)
-    return bridge.connect(user).deposit(token.address, tokenId, sidechainId, sideTo.address)
+    return bridge.connect(user).deposit(token.address, tokenId, sidechainId, _sideTo ?? sideTo.address)
   }
 
   before(async () => {
@@ -101,15 +101,23 @@ describe('NFTBridgeMainchain', () => {
     expect(actual.mainTo).to.equal(zeroAddress)
   })
 
-  it('deposit()', async () => {
-    await mint()
-    expect(await token.ownerOf(tokenId)).to.equal(user.address)
+  describe('deposit()', () => {
+    it('normally', async () => {
+      await mint()
+      expect(await token.ownerOf(tokenId)).to.equal(user.address)
 
-    const tx = await deposit()
-    expect(await token.ownerOf(tokenId)).to.equal(bridge.address)
-    await expect(tx)
-      .to.emit(bridge, 'DepositeInitiated')
-      .withArgs(0, token.address, tokenId, sidechainId, user.address, user.address)
+      const tx = await deposit()
+      expect(await token.ownerOf(tokenId)).to.equal(bridge.address)
+      await expect(tx)
+        .to.emit(bridge, 'DepositeInitiated')
+        .withArgs(0, token.address, tokenId, sidechainId, user.address, user.address)
+    })
+
+    it('sideTo is zero address', async () => {
+      await mint()
+      const tx = deposit(zeroAddress)
+      await expect(tx).to.be.revertedWith('sideTo is zero address.')
+    })
   })
 
   describe('rejectDeposit()', () => {
@@ -160,14 +168,14 @@ describe('NFTBridgeMainchain', () => {
   })
 
   describe('finalizeWithdrawal()', () => {
-    const finalizeWithdrawal = async (_mainchainId?: number) => {
+    const finalizeWithdrawal = async (_mainchainId?: number, mainTo?: string) => {
       const hash = getFinalizeWithdrawalHash(
         _mainchainId ?? mainchainId,
         depositIndex,
         sidechainId,
         withdrawalIndex,
         user.address,
-        user.address,
+        mainTo ?? user.address,
       )
       const signatures = await makeSignature(signer, hash, mainchainId)
       return relayer.finalizeWithdrawal(
@@ -176,7 +184,7 @@ describe('NFTBridgeMainchain', () => {
         sidechainId,
         withdrawalIndex,
         user.address,
-        user.address,
+        mainTo ?? user.address,
         signatures,
       )
     }
@@ -196,6 +204,13 @@ describe('NFTBridgeMainchain', () => {
       await deposit()
       const tx = finalizeWithdrawal(12345)
       await expect(tx).to.be.revertedWith('Invalid main chain id.')
+    })
+
+    it('mainTo is zero address', async () => {
+      await mint()
+      await deposit()
+      const tx = finalizeWithdrawal(undefined, zeroAddress)
+      await expect(tx).to.be.revertedWith('mainTo is zero address.')
     })
 
     it('already withdraw', async () => {

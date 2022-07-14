@@ -83,21 +83,27 @@ describe('NFTBridgeSidechain', () => {
   let relayer: Contract
   let token: Contract
 
-  const createSidechainERC721 = async (_sidechainId?: number, _mainchainId?: number, _mainchainERC721?: string) => {
+  const createSidechainERC721 = async (opts?: {
+    sidechainId?: number
+    mainchainId?: number
+    mainchainERC721?: string
+    tokenName?: string
+    tokenSymbol?: string
+  }) => {
     const hash = getCreateSidechainERC721Hash(
-      _sidechainId ?? sidechainId,
-      _mainchainId ?? mainchainId,
-      _mainchainERC721 ?? mainchainERC721,
-      tokenName,
-      tokenSymbol,
+      opts?.sidechainId ?? sidechainId,
+      opts?.mainchainId ?? mainchainId,
+      opts?.mainchainERC721 ?? mainchainERC721,
+      opts?.tokenName ?? tokenName,
+      opts?.tokenSymbol ?? tokenSymbol,
     )
-    const signatures = makeSignature(signer, hash, sidechainId)
+    const signatures = await makeSignature(signer, hash, sidechainId)
     return relayer.createSidechainERC721(
-      _sidechainId ?? sidechainId,
-      _mainchainId ?? mainchainId,
-      _mainchainERC721 ?? mainchainERC721,
-      tokenName,
-      tokenSymbol,
+      opts?.sidechainId ?? sidechainId,
+      opts?.mainchainId ?? mainchainId,
+      opts?.mainchainERC721 ?? mainchainERC721,
+      opts?.tokenName ?? tokenName,
+      opts?.tokenSymbol ?? tokenSymbol,
       signatures,
     ) as Promise<TransactionResponse>
   }
@@ -127,7 +133,7 @@ describe('NFTBridgeSidechain', () => {
 
   const rejectWithdrawal = async (_sidechainId?: number) => {
     const hash = getRejectWithdrawalHash(_sidechainId ?? sidechainId, withdrawalIndex)
-    const signatures = makeSignature(signer, hash, sidechainId)
+    const signatures = await makeSignature(signer, hash, sidechainId)
     return relayer.rejectWithdrawal(_sidechainId ?? sidechainId, withdrawalIndex, signatures)
   }
 
@@ -178,12 +184,12 @@ describe('NFTBridgeSidechain', () => {
     })
 
     it('invalid chain id', async () => {
-      const tx = createSidechainERC721(0, 12345)
+      const tx = createSidechainERC721({ sidechainId: 12345 })
       await expect(tx).to.be.revertedWith('Invalid side chain id')
     })
 
     it('same chain id', async () => {
-      const tx = createSidechainERC721(undefined, sidechainId)
+      const tx = createSidechainERC721({ mainchainId: sidechainId })
       await expect(tx).to.be.revertedWith('Same chain id')
     })
 

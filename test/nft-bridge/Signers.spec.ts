@@ -60,6 +60,27 @@ describe('Signers', () => {
     nonce = 0
   })
 
+  describe('constructor()', () => {
+    it('normally', async () => {
+      await getContract([accounts[0], accounts[1]])
+    })
+
+    it('signer is zero address', async () => {
+      const tx = factory.deploy([zeroAddress], 1)
+      await expect(tx).to.be.revertedWith('Signer is zero address.')
+    })
+
+    it('duplicate signer', async () => {
+      const tx = getContract([accounts[0], accounts[0]])
+      await expect(tx).to.be.revertedWith('Duplicate signer.')
+    })
+
+    it('threshold is zero', async () => {
+      const tx = getContract([accounts[0]], 0)
+      await expect(tx).to.be.revertedWith('Threshold is zero.')
+    })
+  })
+
   describe('verifySignatures()', () => {
     const getSignature = async (
       contract: Contract,
@@ -84,16 +105,23 @@ describe('Signers', () => {
       signer3 = accounts[3]
     })
 
+    it('invalid signatures length', async () => {
+      const contract = await getContract([signer1, signer2])
+      const signatures = await getSignature(contract, [signer1, signer2], signer3, [])
+      const tx = contract.addSigner(signer3.address, ethers.utils.concat([signatures, '0xff']))
+      await expect(tx).to.be.revertedWith('Invalid signatures length')
+    })
+
     it('invalid chain id', async () => {
       const contract = await getContract([signer1])
-      const signatures = getSignature(contract, [signer1], signer2, [chainid + 1])
+      const signatures = await getSignature(contract, [signer1], signer2, [chainid + 1])
       const tx = contract.addSigner(signer2.address, signatures)
       await expect(tx).to.be.revertedWith('Invalid signatures')
     })
 
     it('below Threshold', async () => {
       let contract = await getContract([signer1, signer2])
-      let signatures = getSignature(contract, [signer2, signer1], signer3, [])
+      let signatures = await getSignature(contract, [signer2, signer1], signer3, [])
 
       // success
       await contract.addSigner(signer3.address, signatures)
@@ -102,7 +130,7 @@ describe('Signers', () => {
 
       // reverted
       contract = await getContract([signer1, signer2])
-      signatures = getSignature(contract, [signer2], signer3, [])
+      signatures = await getSignature(contract, [signer2], signer3, [])
       const tx = contract.addSigner(signer3.address, signatures)
       await expect(tx).to.be.revertedWith('Invalid signatures')
     })
@@ -126,6 +154,16 @@ describe('Signers', () => {
       await contract.addSigner(adding.address, signatures)
       expect(await contract.nonce()).to.equal(1)
       expect(await contract.getSigners()).to.eql([signer1.address, adding.address])
+    })
+
+    it('signer is zero address', async () => {
+      const [signer] = accounts
+      const contract = await getContract([signer])
+
+      const hash = getAddSignerHash(nonce++, contract.address, zeroAddress)
+      const signatures = await makeSignature(signer, hash, chainid)
+      const tx = contract.addSigner(zeroAddress, signatures)
+      await expect(tx).to.be.revertedWith('Signer is zero address')
     })
 
     it('invalid nonce', async () => {
@@ -207,6 +245,16 @@ describe('Signers', () => {
       await contract.updateThreshold(2, signatures)
       expect(await contract.nonce()).to.equal(1)
       expect(await contract.threshold()).to.equal(2)
+    })
+
+    it('threshold is zero', async () => {
+      const [signer] = accounts
+      const contract = await getContract([signer], 1)
+
+      const hash = getUpdateThresholdHash(nonce++, contract.address, 0)
+      const signatures = await makeSignature(signer, hash, chainid)
+      const tx = contract.updateThreshold(0, signatures)
+      await expect(tx).to.be.revertedWith('Threshold is zero.')
     })
 
     it('invalid nonce', async () => {

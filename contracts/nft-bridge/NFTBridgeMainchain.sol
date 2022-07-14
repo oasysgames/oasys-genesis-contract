@@ -41,6 +41,8 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         uint256 sidechainId,
         address sideTo
     ) external {
+        require(sideTo != address(0), "sideTo is zero address.");
+
         IERC721(mainchainERC721).transferFrom(
             msg.sender,
             address(this),
@@ -106,6 +108,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         address mainTo
     ) external onlyOwner {
         require(mainchainId == block.chainid, "Invalid main chain id.");
+        require(mainTo != address(0), "mainTo is zero address.");
 
         DepositInfo storage mainInfo = depositInfos[depositIndex];
         require(mainInfo.mainTo == address(0), "already withdraw");

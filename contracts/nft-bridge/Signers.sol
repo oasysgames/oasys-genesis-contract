@@ -27,11 +27,16 @@ contract Signers {
 
     constructor(address[] memory _signers, uint256 _threshold) {
         for (uint256 i = 0; i < _signers.length; i++) {
-            signers.push(_signers[i]);
+            address signer = _signers[i];
+            require(signer != address(0), "Signer is zero address.");
+            require(!_contains(signers, signer), "Duplicate signer.");
 
-            emit SignerAdded(_signers[i]);
+            signers.push(signer);
+
+            emit SignerAdded(signer);
         }
 
+        require(_threshold > 0, "Threshold is zero.");
         require(signers.length >= _threshold, "Signer shortage.");
         threshold = _threshold;
 
@@ -47,6 +52,9 @@ contract Signers {
         view
         returns (bool)
     {
+        require(_hash != 0x0, "Hash is empty");
+        require(signatures.length % 65 == 0, "Invalid signatures length");
+
         uint256 signatureCount = signatures.length / 65;
         uint256 signerCount = 0;
         address lastSigner = address(0);
@@ -87,6 +95,8 @@ contract Signers {
      * @param _address Allowed address.
      */
     function addSigner(address _address, bytes memory signatures) external {
+        require(_address != address(0), "Signer is zero address.");
+
         bytes32 _hash = keccak256(
             abi.encodePacked(
                 nonce,
@@ -144,6 +154,8 @@ contract Signers {
     function updateThreshold(uint256 _threshold, bytes memory signatures)
         external
     {
+        require(_threshold > 0, "Threshold is zero.");
+
         if (threshold == _threshold) {
             return;
         }
