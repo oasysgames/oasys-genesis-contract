@@ -123,7 +123,10 @@ contract Signers {
         require(verifySignatures(_hash, signatures), "Invalid signatures");
 
         require(_contains(signers, _address), "address not found");
+
         uint256 length = signers.length;
+        require(length - 1 >= threshold, "Signer shortage.");
+
         bool addressMatched = false;
         for (uint256 i = 0; i < length - 1; i++) {
             if (!addressMatched && signers[i] == _address) {
