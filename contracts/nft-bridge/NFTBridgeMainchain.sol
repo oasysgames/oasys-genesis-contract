@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.9;
+pragma solidity 0.8.12;
 
 import { INFTBridgeMainchain } from "./INFTBridgeMainchain.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
