@@ -257,4 +257,9 @@ describe('NFTBridgeMainchain', () => {
       await expect(tx).to.be.revertedWith('Invalid main chain id.')
     })
   })
+
+  it('renounceOwnership()', async () => {
+    const tx = bridge.renounceOwnership()
+    await expect(tx).to.be.revertedWith('Not renounceable.')
+  })
 })

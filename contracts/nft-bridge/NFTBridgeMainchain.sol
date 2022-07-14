@@ -153,4 +153,11 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         require(mainchainId == block.chainid, "Invalid main chain id.");
         super.transferOwnership(newRelayer);
     }
+
+    /**
+     * Prohibit the renonce of ownership.
+     */
+    function renounceOwnership() public override {
+        revert("Not renounceable.");
+    }
 }

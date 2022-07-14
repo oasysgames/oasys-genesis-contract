@@ -234,4 +234,11 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
         require(sidechainId == block.chainid, "Invalid side chain id");
         super.transferOwnership(newRelayer);
     }
+
+    /**
+     * Prohibit the renonce of ownership.
+     */
+    function renounceOwnership() public override {
+        revert("Not renounceable.");
+    }
 }

@@ -328,4 +328,9 @@ describe('NFTBridgeSidechain', () => {
       await expect(tx).to.be.revertedWith('Invalid side chain id')
     })
   })
+
+  it('renounceOwnership()', async () => {
+    const tx = bridge.renounceOwnership()
+    await expect(tx).to.be.revertedWith('Not renounceable.')
+  })
 })
