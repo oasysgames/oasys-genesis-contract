@@ -23,6 +23,7 @@
     "prettier-plugin-solidity": "^1.0.0-beta.19",
     "solc": "^0.8.9",
     "solhint": "^3.3.7",
+    "solidity-bytes-utils": "^0.8.0",
     "solidity-coverage": "^0.7.21",
     "ts-node": "^10.7.0",
     "typescript": "^4.6.3",

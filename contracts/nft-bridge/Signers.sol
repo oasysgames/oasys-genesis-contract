@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
+import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import { BytesLib } from "solidity-bytes-utils/contracts/BytesLib.sol";
+
 contract Signers {
     /**********
      * Events *
@@ -69,24 +72,14 @@ contract Signers {
     ) private pure returns (address) {
         require(signatures.length >= index + 65, "Signatures size shortage");
 
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-        // solium-disable-next-line security/no-inline-assembly
-        assembly {
-            r := mload(add(signatures, add(index, 32)))
-            s := mload(add(signatures, add(index, 64)))
-            v := and(255, mload(add(signatures, add(index, 65))))
-        }
-        if (v < 27) {
-            v += 27;
-        }
-        require(v == 27 || v == 28, "v must be 27 or 28");
-
         _hash = keccak256(
             abi.encodePacked("\x19Ethereum Signed Message:\n64", _hash, chainid)
         );
-        return ecrecover(_hash, v, r, s);
+        (address recovered, ) = ECDSA.tryRecover(
+            _hash,
+            BytesLib.slice(signatures, index, 65)
+        );
+        return recovered;
     }
 
     /**

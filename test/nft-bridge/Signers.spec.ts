@@ -61,10 +61,6 @@ describe('Signers', () => {
   })
 
   describe('verifySignatures()', () => {
-    type override = {
-      chainid?: number
-    }
-
     const getSignature = async (
       contract: Contract,
       signers: Account[],
