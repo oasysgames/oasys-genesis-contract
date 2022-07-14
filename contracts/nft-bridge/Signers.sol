@@ -47,8 +47,9 @@ contract Signers {
         uint256 signatureCount = signatures.length / 65;
         uint256 signerCount = 0;
         address lastSigner = address(0);
+        uint256 chainid = block.chainid;
         for (uint256 i = 0; i < signatureCount; i++) {
-            address _signer = recoverSigner(_hash, signatures, i * 65);
+            address _signer = recoverSigner(_hash, chainid, signatures, i * 65);
             if (_contains(signers, _signer)) {
                 signerCount++;
             }
@@ -62,6 +63,7 @@ contract Signers {
 
     function recoverSigner(
         bytes32 _hash,
+        uint256 chainid,
         bytes memory signatures,
         uint256 index
     ) private pure returns (address) {
@@ -82,7 +84,7 @@ contract Signers {
         require(v == 27 || v == 28, "v must be 27 or 28");
 
         _hash = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", _hash)
+            abi.encodePacked("\x19Ethereum Signed Message:\n64", _hash, chainid)
         );
         return ecrecover(_hash, v, r, s);
     }
