@@ -210,13 +210,19 @@ const fromEther = (ether: string) => BigNumber.from(toWei(ether))
 
 const toBNWei = (ether: string) => BigNumber.from(toWei(ether))
 
-const makeSignature = async (signer: Account, hash: string, chainid: number): Promise<string> => {
+const makeSignature = async (signer: Account, hash: string, chainid: number, expiration: number): Promise<string> => {
   const values = [
     { type: 'bytes32', value: hash },
     { type: 'uint256', value: String(chainid) },
+    { type: 'uint64', value: String(expiration) },
   ]
   const msg = web3.utils.encodePacked(...values)
   return await signer.signMessage(toBuffer(msg!))
+}
+
+const makeExpiration = (duration?: number): number => {
+  const dt = new Date()
+  return ~~(dt.getTime() / 1000) + (duration ?? 86400)
 }
 
 const chainid = network.config.chainId!
@@ -241,6 +247,7 @@ export {
   fromEther,
   toBNWei,
   makeSignature,
+  makeExpiration,
   chainid,
   zeroAddress,
   Token,

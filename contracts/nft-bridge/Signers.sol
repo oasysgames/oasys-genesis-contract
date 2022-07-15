@@ -47,12 +47,13 @@ contract Signers {
      * Public Functions *
      ********************/
 
-    function verifySignatures(bytes32 _hash, bytes memory signatures)
-        public
-        view
-        returns (bool)
-    {
+    function verifySignatures(
+        bytes32 _hash,
+        uint64 expiration,
+        bytes memory signatures
+    ) public view returns (bool) {
         require(_hash != 0x0, "Hash is empty");
+        require(expiration >= block.timestamp, "Signature expired");
         require(signatures.length % 65 == 0, "Invalid signatures length");
 
         uint256 signatureCount = signatures.length / 65;
@@ -60,7 +61,13 @@ contract Signers {
         address lastSigner = address(0);
         uint256 chainid = block.chainid;
         for (uint256 i = 0; i < signatureCount; i++) {
-            address _signer = recoverSigner(_hash, chainid, signatures, i * 65);
+            address _signer = recoverSigner(
+                _hash,
+                chainid,
+                expiration,
+                signatures,
+                i * 65
+            );
             if (_contains(signers, _signer)) {
                 signerCount++;
             }
@@ -75,13 +82,19 @@ contract Signers {
     function recoverSigner(
         bytes32 _hash,
         uint256 chainid,
+        uint64 expiration,
         bytes memory signatures,
         uint256 index
     ) private pure returns (address) {
         require(signatures.length >= index + 65, "Signatures size shortage");
 
         _hash = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n64", _hash, chainid)
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n72",
+                _hash,
+                chainid,
+                expiration
+            )
         );
         (address recovered, ) = ECDSA.tryRecover(
             _hash,
@@ -94,7 +107,11 @@ contract Signers {
      * Add the address into the signers.
      * @param _address Allowed address.
      */
-    function addSigner(address _address, bytes memory signatures) external {
+    function addSigner(
+        address _address,
+        uint64 expiration,
+        bytes memory signatures
+    ) external {
         require(_address != address(0), "Signer is zero address.");
 
         bytes32 _hash = keccak256(
@@ -104,7 +121,10 @@ contract Signers {
                 abi.encodeWithSelector(Signers.addSigner.selector, _address)
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         require(!_contains(signers, _address), "already added");
         signers.push(_address);
@@ -117,7 +137,11 @@ contract Signers {
      * Remove the address from the signers.
      * @param _address Removed address.
      */
-    function removeSigner(address _address, bytes memory signatures) external {
+    function removeSigner(
+        address _address,
+        uint64 expiration,
+        bytes memory signatures
+    ) external {
         bytes32 _hash = keccak256(
             abi.encodePacked(
                 nonce,
@@ -125,7 +149,10 @@ contract Signers {
                 abi.encodeWithSelector(Signers.removeSigner.selector, _address)
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         require(_contains(signers, _address), "address not found");
 
@@ -151,9 +178,11 @@ contract Signers {
      * Update the verification threshold.
      * @param _threshold Verification threshold.
      */
-    function updateThreshold(uint256 _threshold, bytes memory signatures)
-        external
-    {
+    function updateThreshold(
+        uint256 _threshold,
+        uint64 expiration,
+        bytes memory signatures
+    ) external {
         require(_threshold > 0, "Threshold is zero.");
 
         if (threshold == _threshold) {
@@ -170,7 +199,10 @@ contract Signers {
                 )
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         require(signers.length >= _threshold, "Signer shortage.");
         threshold = _threshold;

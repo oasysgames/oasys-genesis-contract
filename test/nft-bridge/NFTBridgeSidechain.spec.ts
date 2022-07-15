@@ -3,7 +3,7 @@ import { ethers, network } from 'hardhat'
 import { ContractFactory, Contract } from 'ethers'
 import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { expect } from 'chai'
-import { chainid as sidechainId, makeSignature, zeroAddress } from '../helpers'
+import { chainid as sidechainId, makeExpiration, makeSignature, zeroAddress } from '../helpers'
 import { TransactionResponse } from '@ethersproject/abstract-provider'
 
 const mainchainId = 33333
@@ -68,6 +68,8 @@ const getTransferSidechainRelayerHash = (sidechainId: number, newRelayer: string
 }
 
 describe('NFTBridgeSidechain', () => {
+  const expiration = makeExpiration()
+
   let accounts: Account[]
   let deployer: Account
   let signer: Account
@@ -97,13 +99,14 @@ describe('NFTBridgeSidechain', () => {
       opts?.tokenName ?? tokenName,
       opts?.tokenSymbol ?? tokenSymbol,
     )
-    const signatures = await makeSignature(signer, hash, sidechainId)
+    const signatures = await makeSignature(signer, hash, sidechainId, expiration)
     return relayer.createSidechainERC721(
       opts?.sidechainId ?? sidechainId,
       opts?.mainchainId ?? mainchainId,
       opts?.mainchainERC721 ?? mainchainERC721,
       opts?.tokenName ?? tokenName,
       opts?.tokenSymbol ?? tokenSymbol,
+      expiration,
       signatures,
     ) as Promise<TransactionResponse>
   }
@@ -118,7 +121,7 @@ describe('NFTBridgeSidechain', () => {
       mainFrom.address,
       user.address,
     )
-    const signatures = await makeSignature(signer, hash, sidechainId)
+    const signatures = await makeSignature(signer, hash, sidechainId, expiration)
     return relayer.finalizeDeposit(
       _sidechainId ?? sidechainId,
       mainchainId,
@@ -127,14 +130,15 @@ describe('NFTBridgeSidechain', () => {
       tokenId,
       mainFrom.address,
       user.address,
+      expiration,
       signatures,
     )
   }
 
   const rejectWithdrawal = async (_sidechainId?: number) => {
     const hash = getRejectWithdrawalHash(_sidechainId ?? sidechainId, withdrawalIndex)
-    const signatures = await makeSignature(signer, hash, sidechainId)
-    return relayer.rejectWithdrawal(_sidechainId ?? sidechainId, withdrawalIndex, signatures)
+    const signatures = await makeSignature(signer, hash, sidechainId, expiration)
+    return relayer.rejectWithdrawal(_sidechainId ?? sidechainId, withdrawalIndex, expiration, signatures)
   }
 
   before(async () => {
@@ -316,15 +320,15 @@ describe('NFTBridgeSidechain', () => {
       expect(await bridge.owner()).to.equal(relayer.address)
 
       const hash = getTransferSidechainRelayerHash(sidechainId, newRelayer)
-      const signatures = await makeSignature(signer, hash, sidechainId)
-      await relayer.connect(user).transferSidechainRelayer(sidechainId, newRelayer, signatures)
+      const signatures = await makeSignature(signer, hash, sidechainId, expiration)
+      await relayer.connect(user).transferSidechainRelayer(sidechainId, newRelayer, expiration, signatures)
       expect(await bridge.owner()).to.equal(newRelayer)
     })
 
     it('invalid chain id', async () => {
       const hash = getTransferSidechainRelayerHash(12345, newRelayer)
-      const signatures = await makeSignature(signer, hash, sidechainId)
-      const tx = relayer.connect(user).transferSidechainRelayer(12345, newRelayer, signatures)
+      const signatures = await makeSignature(signer, hash, sidechainId, expiration)
+      const tx = relayer.connect(user).transferSidechainRelayer(12345, newRelayer, expiration, signatures)
       await expect(tx).to.be.revertedWith('Invalid side chain id')
     })
   })

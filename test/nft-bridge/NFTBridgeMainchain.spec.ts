@@ -3,7 +3,7 @@ import { ethers } from 'hardhat'
 import { ContractFactory, Contract } from 'ethers'
 import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { expect } from 'chai'
-import { chainid as mainchainId, makeSignature, zeroAddress } from '../helpers'
+import { chainid as mainchainId, makeExpiration, makeSignature, zeroAddress } from '../helpers'
 
 const sidechainId = 33333
 const tokenId = 1
@@ -47,6 +47,8 @@ const getTransferMainchainRelayerHash = (mainchainId: number, newRelayer: string
 }
 
 describe('NFTBridgeMainchain', () => {
+  const expiration = makeExpiration()
+
   let accounts: Account[]
   let deployer: Account
   let signer: Account
@@ -123,8 +125,8 @@ describe('NFTBridgeMainchain', () => {
   describe('rejectDeposit()', () => {
     const rejectDeposit = async (_mainchainId?: number) => {
       const hash = getRejectDepositHash(_mainchainId ?? mainchainId, depositIndex)
-      const signatures = await makeSignature(signer, hash, mainchainId)
-      return relayer.connect(user).rejectDeposit(_mainchainId ?? mainchainId, depositIndex, signatures)
+      const signatures = await makeSignature(signer, hash, mainchainId, expiration)
+      return relayer.connect(user).rejectDeposit(_mainchainId ?? mainchainId, depositIndex, expiration, signatures)
     }
 
     it('normally', async () => {
@@ -177,7 +179,7 @@ describe('NFTBridgeMainchain', () => {
         user.address,
         mainTo ?? user.address,
       )
-      const signatures = await makeSignature(signer, hash, mainchainId)
+      const signatures = await makeSignature(signer, hash, mainchainId, expiration)
       return relayer.finalizeWithdrawal(
         _mainchainId ?? mainchainId,
         depositIndex,
@@ -185,6 +187,7 @@ describe('NFTBridgeMainchain', () => {
         withdrawalIndex,
         user.address,
         mainTo ?? user.address,
+        expiration,
         signatures,
       )
     }
@@ -245,15 +248,15 @@ describe('NFTBridgeMainchain', () => {
       expect(await bridge.owner()).to.equal(relayer.address)
 
       const hash = getTransferMainchainRelayerHash(mainchainId, newRelayer)
-      const signatures = await makeSignature(signer, hash, mainchainId)
-      await relayer.connect(user).transferMainchainRelayer(mainchainId, newRelayer, signatures)
+      const signatures = await makeSignature(signer, hash, mainchainId, expiration)
+      await relayer.connect(user).transferMainchainRelayer(mainchainId, newRelayer, expiration, signatures)
       expect(await bridge.owner()).to.equal(newRelayer)
     })
 
     it('invalid chain id', async () => {
       const hash = getTransferMainchainRelayerHash(12345, newRelayer)
-      const signatures = await makeSignature(signer, hash, mainchainId)
-      const tx = relayer.connect(user).transferMainchainRelayer(12345, newRelayer, signatures)
+      const signatures = await makeSignature(signer, hash, mainchainId, expiration)
+      const tx = relayer.connect(user).transferMainchainRelayer(12345, newRelayer, expiration, signatures)
       await expect(tx).to.be.revertedWith('Invalid main chain id.')
     })
   })
