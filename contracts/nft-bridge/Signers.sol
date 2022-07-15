@@ -9,35 +9,37 @@ contract Signers {
      * Events *
      **********/
 
-    event SignerAdded(address _address);
-    event SignerRemoved(address _address);
-    event ThresholdUpdated(uint256 _threshold);
+    event SignerAdded(address indexed _address);
+    event SignerRemoved(address indexed _address);
+    event ThresholdUpdated(uint256 indexed _threshold);
 
     /**********************
      * Contract Variables *
      **********************/
 
     uint256 public nonce;
-    address[] private signers;
     uint256 public threshold;
+    address[] private _signers;
+    mapping(address => uint256) private _signerId;
 
     /***************
      * Constructor *
      ***************/
 
-    constructor(address[] memory _signers, uint256 _threshold) {
-        for (uint256 i = 0; i < _signers.length; i++) {
-            address signer = _signers[i];
+    constructor(address[] memory signers, uint256 _threshold) {
+        for (uint256 i = 0; i < signers.length; i++) {
+            address signer = signers[i];
             require(signer != address(0), "Signer is zero address.");
-            require(!_contains(signers, signer), "Duplicate signer.");
+            require(!_contains(signer), "Duplicate signer.");
 
-            signers.push(signer);
+            _signers.push(signer);
+            _signerId[signer] = _signers.length;
 
             emit SignerAdded(signer);
         }
 
         require(_threshold > 0, "Threshold is zero.");
-        require(signers.length >= _threshold, "Signer shortage.");
+        require(_signers.length >= _threshold, "Signer shortage.");
         threshold = _threshold;
 
         emit ThresholdUpdated(_threshold);
@@ -61,14 +63,14 @@ contract Signers {
         address lastSigner = address(0);
         uint256 chainid = block.chainid;
         for (uint256 i = 0; i < signatureCount; i++) {
-            address _signer = recoverSigner(
+            address _signer = _recoverSigner(
                 _hash,
                 chainid,
                 expiration,
                 signatures,
                 i * 65
             );
-            if (_contains(signers, _signer)) {
+            if (_contains(_signer)) {
                 signerCount++;
             }
 
@@ -79,7 +81,7 @@ contract Signers {
         return signerCount >= threshold;
     }
 
-    function recoverSigner(
+    function _recoverSigner(
         bytes32 _hash,
         uint256 chainid,
         uint64 expiration,
@@ -126,8 +128,9 @@ contract Signers {
             "Invalid signatures"
         );
 
-        require(!_contains(signers, _address), "already added");
-        signers.push(_address);
+        require(!_contains(_address), "already added");
+        _signers.push(_address);
+        _signerId[_address] = _signers.length;
 
         nonce++;
         emit SignerAdded(_address);
@@ -154,21 +157,17 @@ contract Signers {
             "Invalid signatures"
         );
 
-        require(_contains(signers, _address), "address not found");
+        require(_contains(_address), "address not found");
 
-        uint256 length = signers.length;
+        uint256 length = _signers.length;
         require(length - 1 >= threshold, "Signer shortage.");
 
-        bool addressMatched = false;
-        for (uint256 i = 0; i < length - 1; i++) {
-            if (!addressMatched && signers[i] == _address) {
-                addressMatched = true;
-            }
-            if (addressMatched) {
-                signers[i] = signers[i + 1];
-            }
-        }
-        signers.pop();
+        uint256 id = _signerId[_address];
+        address last = _signers[length - 1];
+        _signers[id - 1] = last;
+        _signers.pop();
+        _signerId[last] = id;
+        _signerId[_address] = 0;
 
         nonce++;
         emit SignerRemoved(_address);
@@ -204,7 +203,7 @@ contract Signers {
             "Invalid signatures"
         );
 
-        require(signers.length >= _threshold, "Signer shortage.");
+        require(_signers.length >= _threshold, "Signer shortage.");
         threshold = _threshold;
 
         nonce++;
@@ -215,7 +214,7 @@ contract Signers {
      * Returns the allowlist.
      */
     function getSigners() external view returns (address[] memory) {
-        return signers;
+        return _signers;
     }
 
     /**********************
@@ -224,21 +223,10 @@ contract Signers {
 
     /**
      * Check if the array of address contains the address.
-     * @param _addresses Array of address.
      * @param _address address.
      * @return Contains of not.
      */
-    function _contains(address[] memory _addresses, address _address)
-        internal
-        pure
-        returns (bool)
-    {
-        uint256 length = _addresses.length;
-        for (uint256 i = 0; i < length; i++) {
-            if (_addresses[i] == _address) {
-                return true;
-            }
-        }
-        return false;
+    function _contains(address _address) internal view returns (bool) {
+        return _signerId[_address] > 0;
     }
 }

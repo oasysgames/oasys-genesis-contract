@@ -10,10 +10,10 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
      * Contract Variables *
      **********************/
 
-    mapping(uint256 => mapping(address => address)) private erc721Map;
-    mapping(uint256 => mapping(uint256 => bool)) private depositIndexes;
-    mapping(address => mapping(uint256 => uint256)) private depositIndexMap;
-    WithdrawalInfo[] private withdrawalInfos;
+    mapping(uint256 => mapping(address => address)) private _erc721Map;
+    mapping(uint256 => mapping(uint256 => bool)) private _depositIndexes;
+    mapping(address => mapping(uint256 => uint256)) private _depositIndexMap;
+    WithdrawalInfo[] private _withdrawalInfos;
 
     /********************
      * Public Functions *
@@ -29,7 +29,7 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
         view
         returns (address)
     {
-        return erc721Map[mainchainId][mainchainERC721];
+        return _erc721Map[mainchainId][mainchainERC721];
     }
 
     /**
@@ -41,7 +41,7 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
         view
         returns (WithdrawalInfo memory)
     {
-        return withdrawalInfos[withdrawalIndex];
+        return _withdrawalInfos[withdrawalIndex];
     }
 
     /**
@@ -73,7 +73,7 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
             name,
             symbol
         );
-        erc721Map[mainchainId][mainchainERC721] = address(sidechainERC721);
+        _erc721Map[mainchainId][mainchainERC721] = address(sidechainERC721);
 
         emit SidechainERC721Created(
             mainchainId,
@@ -123,11 +123,11 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
         }
 
         require(
-            !depositIndexes[mainchainId][depositIndex],
+            !_depositIndexes[mainchainId][depositIndex],
             "Already deposited"
         );
-        depositIndexes[mainchainId][depositIndex] = true;
-        depositIndexMap[sidechainERC721][tokenId] = depositIndex;
+        _depositIndexes[mainchainId][depositIndex] = true;
+        _depositIndexMap[sidechainERC721][tokenId] = depositIndex;
 
         try SidechainERC721(sidechainERC721).mint(sideTo, tokenId) {
             emit DepositeFinalized(
@@ -172,14 +172,14 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
         );
 
         SidechainERC721(sidechainERC721).burn(msg.sender, tokenId);
-        withdrawalInfos.push(
+        _withdrawalInfos.push(
             WithdrawalInfo(sidechainERC721, tokenId, msg.sender, false)
         );
 
         emit WithdrawalInitiated(
-            withdrawalInfos.length - 1,
+            _withdrawalInfos.length - 1,
             mainchainId,
-            depositIndexMap[sidechainERC721][tokenId],
+            _depositIndexMap[sidechainERC721][tokenId],
             mainchainERC721,
             sidechainERC721,
             tokenId,
@@ -199,7 +199,7 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
     {
         require(sidechainId == block.chainid, "Invalid side chain id");
 
-        WithdrawalInfo storage sideWithdrawal = withdrawalInfos[
+        WithdrawalInfo storage sideWithdrawal = _withdrawalInfos[
             withdrawalIndex
         ];
         require(!sideWithdrawal.rejected, "Already rejected");
@@ -216,7 +216,7 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
         emit WithdrawalRejected(
             withdrawalIndex,
             mainchainId,
-            depositIndexMap[sideWithdrawal.sidechainERC721][
+            _depositIndexMap[sideWithdrawal.sidechainERC721][
                 sideWithdrawal.tokenId
             ]
         );

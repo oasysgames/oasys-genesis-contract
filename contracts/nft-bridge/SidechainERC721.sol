@@ -20,36 +20,36 @@ contract SidechainERC721 is ERC721, ERC721Enumerable, Ownable {
     /**********************
      * Contract Variables *
      **********************/
-    uint256 private mainchainId;
-    address private mainchainERC721;
+    uint256 private immutable _mainchainId;
+    address private immutable _mainchainERC721;
 
     /**
-     * @param _mainchainId ID of the main chain.
-     * @param _mainchainERC721 Address of the corresponding main chain ERC721.
+     * @param mainchainId ID of the main chain.
+     * @param mainchainERC721 Address of the corresponding main chain ERC721.
      * @param _name ERC721 name.
      * @param _symbol ERC721 symbol.
      */
     constructor(
-        uint256 _mainchainId,
-        address _mainchainERC721,
+        uint256 mainchainId,
+        address mainchainERC721,
         string memory _name,
         string memory _symbol
     ) ERC721(_name, _symbol) {
-        mainchainId = _mainchainId;
-        mainchainERC721 = _mainchainERC721;
+        _mainchainId = mainchainId;
+        _mainchainERC721 = mainchainERC721;
     }
 
     function getMainchainERC721() external view returns (uint256, address) {
-        return (mainchainId, mainchainERC721);
+        return (_mainchainId, _mainchainERC721);
     }
 
-    function mint(address to, uint256 tokenId) public virtual onlyOwner {
+    function mint(address to, uint256 tokenId) external virtual onlyOwner {
         _mint(to, tokenId);
 
         emit SidechainMint(to, tokenId);
     }
 
-    function burn(address from, uint256 tokenId) public virtual onlyOwner {
+    function burn(address from, uint256 tokenId) external virtual onlyOwner {
         _burn(tokenId);
 
         emit SidechainBurn(from, tokenId);

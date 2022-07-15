@@ -10,7 +10,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
      * Contract Variables *
      **********************/
 
-    DepositInfo[] private depositInfos;
+    DepositInfo[] private _depositInfos;
 
     /********************
      * Public Functions *
@@ -25,7 +25,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         view
         returns (DepositInfo memory)
     {
-        return depositInfos[depositIndex];
+        return _depositInfos[depositIndex];
     }
 
     /**
@@ -48,12 +48,12 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
             address(this),
             tokenId
         );
-        depositInfos.push(
+        _depositInfos.push(
             DepositInfo(mainchainERC721, tokenId, msg.sender, address(0))
         );
 
         emit DepositeInitiated(
-            depositInfos.length - 1,
+            _depositInfos.length - 1,
             mainchainERC721,
             tokenId,
             sidechainId,
@@ -73,7 +73,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
     {
         require(mainchainId == block.chainid, "Invalid main chain id.");
 
-        DepositInfo storage mainInfo = depositInfos[depositIndex];
+        DepositInfo storage mainInfo = _depositInfos[depositIndex];
         require(mainInfo.mainTo == address(0), "already rejected");
 
         mainInfo.mainTo = mainInfo.mainFrom;
@@ -110,7 +110,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         require(mainchainId == block.chainid, "Invalid main chain id.");
         require(mainTo != address(0), "mainTo is zero address.");
 
-        DepositInfo storage mainInfo = depositInfos[depositIndex];
+        DepositInfo storage mainInfo = _depositInfos[depositIndex];
         require(mainInfo.mainTo == address(0), "already withdraw");
 
         mainInfo.mainTo = mainTo;
