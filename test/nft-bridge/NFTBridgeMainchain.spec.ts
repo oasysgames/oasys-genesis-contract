@@ -153,20 +153,6 @@ describe('NFTBridgeMainchain', () => {
       const tx = rejectDeposit()
       await expect(tx).to.be.revertedWith('already rejected')
     })
-
-    it('failed token transfer', async () => {
-      const to = '0xbeAfbeafbEAFBeAFbeAFBEafBEAFbeaFBEAfbeaF'
-
-      await mint()
-      await deposit()
-
-      await token.forceTransfer(to, tokenId)
-      expect(await token.ownerOf(tokenId)).to.equal(to)
-
-      const tx = await rejectDeposit()
-      expect(await token.ownerOf(tokenId)).to.equal(to)
-      await expect(tx).to.emit(bridge, 'DepositeRejectFailed').withArgs(depositIndex)
-    })
   })
 
   describe('finalizeWithdrawal()', () => {
