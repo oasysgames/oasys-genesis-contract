@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.12;
 
-import {INFTBridgeMainchain} from "./INFTBridgeMainchain.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import { INFTBridgeMainchain } from "./INFTBridgeMainchain.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
     /**********************
@@ -109,14 +109,15 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         DepositInfo storage mainInfo = _depositInfos[depositIndex];
         require(mainInfo.mainTo == address(0), "already withdraw");
 
-        mainInfo.mainTo = mainTo;
         try
             IERC721(mainInfo.mainchainERC721).safeTransferFrom(
                 address(this),
-                mainInfo.mainTo,
+                mainTo,
                 mainInfo.tokenId
             )
         {
+            mainInfo.mainTo = mainTo;
+
             emit WithdrawalFinalized(
                 depositIndex,
                 sidechainId,
