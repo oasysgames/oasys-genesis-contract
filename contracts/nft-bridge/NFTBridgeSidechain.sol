@@ -126,10 +126,11 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
             !_depositIndexes[mainchainId][depositIndex],
             "Already deposited"
         );
-        _depositIndexes[mainchainId][depositIndex] = true;
-        _depositIndexMap[sidechainERC721][tokenId] = depositIndex;
 
         try SidechainERC721(sidechainERC721).mint(sideTo, tokenId) {
+            _depositIndexes[mainchainId][depositIndex] = true;
+            _depositIndexMap[sidechainERC721][tokenId] = depositIndex;
+
             emit DepositeFinalized(
                 mainchainId,
                 depositIndex,
