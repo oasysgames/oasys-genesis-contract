@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.12;
+pragma solidity 0.8.12;
 
 import { System } from "./System.sol";
 import { IEnvironment } from "./IEnvironment.sol";
