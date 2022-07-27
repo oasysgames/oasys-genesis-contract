@@ -3,7 +3,7 @@ import { ethers } from 'hardhat'
 import { ContractFactory, Contract } from 'ethers'
 import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { expect } from 'chai'
-import { chainid as mainchainId, makeExpiration, makeSignature, zeroAddress } from '../helpers'
+import { chainid as mainchainId, makeExpiration, makeSignature, makeHashWithNonce, zeroAddress } from '../helpers'
 
 const sidechainId = 33333
 const tokenId = 1
@@ -39,11 +39,11 @@ const getFinalizeWithdrawalHash = (
   return hash
 }
 
-const getTransferMainchainRelayerHash = (mainchainId: number, newRelayer: string) => {
+const getTransferMainchainRelayerHash = (nonce: number, to: string, mainchainId: number, newRelayer: string) => {
   const fsig = abi.encodeFunctionSignature('transferMainchainRelayer(uint256,address)')
   const psig = abi.encodeParameters(['uint256', 'address'], [mainchainId, newRelayer])
-  const hash = ethers.utils.keccak256(fsig + psig.slice(2))
-  return hash
+  const encodedSelector = fsig + psig.slice(2)
+  return makeHashWithNonce(nonce, to, encodedSelector)
 }
 
 describe('NFTBridgeMainchain', () => {
@@ -62,6 +62,8 @@ describe('NFTBridgeMainchain', () => {
   let bridge: Contract
   let relayer: Contract
   let token: Contract
+
+  let nonce: number
 
   const mint = async () => {
     return token.connect(deployer).mint(user.address, tokenId)
@@ -85,6 +87,8 @@ describe('NFTBridgeMainchain', () => {
   })
 
   beforeEach(async () => {
+    nonce = 0
+
     bridge = await bridgeFactory.connect(deployer).deploy()
     relayer = await relayerFactory.connect(deployer).deploy(bridge.address, zeroAddress, [signer.address], 1)
     token = await tokenFactory.connect(deployer).deploy('test token', 'tt')
@@ -230,19 +234,54 @@ describe('NFTBridgeMainchain', () => {
   describe('transferMainchainRelayer()', () => {
     const newRelayer = '0xbeAfbeafbEAFBeAFbeAFBEafBEAFbeaFBEAfbeaF'
 
+    const transferMainchainRelayer = async (override?: {
+      nonce?: number
+      contractAddress?: string
+      mainchainId?: number
+      newRelayer?: string
+    }) => {
+      const hash = getTransferMainchainRelayerHash(
+        override?.nonce ?? nonce++,
+        override?.contractAddress ?? relayer.address,
+        override?.mainchainId ?? mainchainId,
+        override?.newRelayer ?? newRelayer,
+      )
+      const signatures = await makeSignature(signer, hash, mainchainId, expiration)
+      return relayer
+        .connect(user)
+        .transferMainchainRelayer(
+          override?.mainchainId ?? mainchainId,
+          override?.newRelayer ?? newRelayer,
+          expiration,
+          signatures,
+        )
+    }
+
     it('normally', async () => {
+      expect(await relayer.nonce()).to.equal(0)
       expect(await bridge.owner()).to.equal(relayer.address)
 
-      const hash = getTransferMainchainRelayerHash(mainchainId, newRelayer)
-      const signatures = await makeSignature(signer, hash, mainchainId, expiration)
-      await relayer.connect(user).transferMainchainRelayer(mainchainId, newRelayer, expiration, signatures)
+      await transferMainchainRelayer()
+      expect(await relayer.nonce()).to.equal(1)
       expect(await bridge.owner()).to.equal(newRelayer)
     })
 
+    it('invalid nonce', async () => {
+      await transferMainchainRelayer()
+
+      const tx = transferMainchainRelayer({ nonce: 0 })
+      await expect(tx).to.be.revertedWith('Invalid signatures')
+    })
+
+    it('invalid to', async () => {
+      await transferMainchainRelayer()
+
+      const tx = transferMainchainRelayer({ contractAddress: zeroAddress })
+      await expect(tx).to.be.revertedWith('Invalid signatures')
+    })
+
     it('invalid chain id', async () => {
-      const hash = getTransferMainchainRelayerHash(12345, newRelayer)
-      const signatures = await makeSignature(signer, hash, mainchainId, expiration)
-      const tx = relayer.connect(user).transferMainchainRelayer(12345, newRelayer, expiration, signatures)
+      const tx = transferMainchainRelayer({ mainchainId: 12345 })
       await expect(tx).to.be.revertedWith('Invalid main chain id.')
     })
   })

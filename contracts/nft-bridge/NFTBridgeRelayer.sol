@@ -104,10 +104,14 @@ contract NFTBridgeRelayer is Signers {
         bytes memory signatures
     ) external {
         bytes32 _hash = keccak256(
-            abi.encodeWithSelector(
-                INFTBridgeMainchain.transferMainchainRelayer.selector,
-                mainchainId,
-                newRelayer
+            abi.encodePacked(
+                nonce,
+                address(this),
+                abi.encodeWithSelector(
+                    INFTBridgeMainchain.transferMainchainRelayer.selector,
+                    mainchainId,
+                    newRelayer
+                )
             )
         );
         require(
@@ -119,6 +123,8 @@ contract NFTBridgeRelayer is Signers {
             mainchainId,
             newRelayer
         );
+
+        nonce++;
     }
 
     function createSidechainERC721(
@@ -224,10 +230,14 @@ contract NFTBridgeRelayer is Signers {
         bytes memory signatures
     ) external {
         bytes32 _hash = keccak256(
-            abi.encodeWithSelector(
-                INFTBridgeSidechain.transferSidechainRelayer.selector,
-                sidechainId,
-                newRelayer
+            abi.encodePacked(
+                nonce,
+                address(this),
+                abi.encodeWithSelector(
+                    INFTBridgeSidechain.transferSidechainRelayer.selector,
+                    sidechainId,
+                    newRelayer
+                )
             )
         );
         require(
@@ -239,5 +249,7 @@ contract NFTBridgeRelayer is Signers {
             sidechainId,
             newRelayer
         );
+
+        nonce++;
     }
 }

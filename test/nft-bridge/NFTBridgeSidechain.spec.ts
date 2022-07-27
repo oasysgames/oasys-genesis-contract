@@ -3,7 +3,7 @@ import { ethers, network } from 'hardhat'
 import { ContractFactory, Contract } from 'ethers'
 import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { expect } from 'chai'
-import { chainid as sidechainId, makeExpiration, makeSignature, zeroAddress } from '../helpers'
+import { chainid as sidechainId, makeExpiration, makeHashWithNonce, makeSignature, zeroAddress } from '../helpers'
 import { TransactionResponse } from '@ethersproject/abstract-provider'
 
 const mainchainId = 33333
@@ -60,11 +60,11 @@ const getRejectWithdrawalHash = (sidechainId: number, withdrawalIndex: number) =
   return hash
 }
 
-const getTransferSidechainRelayerHash = (sidechainId: number, newRelayer: string) => {
+const getTransferSidechainRelayerHash = (nonce: number, to: string, sidechainId: number, newRelayer: string) => {
   const fsig = abi.encodeFunctionSignature('transferSidechainRelayer(uint256,address)')
   const psig = abi.encodeParameters(['uint256', 'address'], [sidechainId, newRelayer])
-  const hash = ethers.utils.keccak256(fsig + psig.slice(2))
-  return hash
+  const encodedSelector = fsig + psig.slice(2)
+  return makeHashWithNonce(nonce, to, encodedSelector)
 }
 
 describe('NFTBridgeSidechain', () => {
@@ -84,6 +84,8 @@ describe('NFTBridgeSidechain', () => {
   let bridge: Contract
   let relayer: Contract
   let token: Contract
+
+  let nonce: number
 
   const createSidechainERC721 = async (opts?: {
     sidechainId?: number
@@ -157,9 +159,12 @@ describe('NFTBridgeSidechain', () => {
   })
 
   beforeEach(async () => {
+    nonce = 0
     await network.provider.send('hardhat_reset')
+
     bridge = await bridgeFactory.connect(deployer).deploy()
     relayer = await relayerFactory.connect(deployer).deploy(zeroAddress, bridge.address, [signer.address], 1)
+
     await bridge.connect(deployer).transferSidechainRelayer(sidechainId, relayer.address)
   })
 
@@ -316,19 +321,54 @@ describe('NFTBridgeSidechain', () => {
   describe('transferSidechainRelayer()', () => {
     const newRelayer = '0xbeAfbeafbEAFBeAFbeAFBEafBEAFbeaFBEAfbeaF'
 
+    const transferSidechainRelayerHash = async (override?: {
+      nonce?: number
+      contractAddress?: string
+      sidechainId?: number
+      newRelayer?: string
+    }) => {
+      const hash = getTransferSidechainRelayerHash(
+        override?.nonce ?? nonce++,
+        override?.contractAddress ?? relayer.address,
+        override?.sidechainId ?? sidechainId,
+        override?.newRelayer ?? newRelayer,
+      )
+      const signatures = await makeSignature(signer, hash, sidechainId, expiration)
+      return relayer
+        .connect(user)
+        .transferSidechainRelayer(
+          override?.sidechainId ?? sidechainId,
+          override?.newRelayer ?? newRelayer,
+          expiration,
+          signatures,
+        )
+    }
+
     it('normally', async () => {
+      expect(await relayer.nonce()).to.equal(0)
       expect(await bridge.owner()).to.equal(relayer.address)
 
-      const hash = getTransferSidechainRelayerHash(sidechainId, newRelayer)
-      const signatures = await makeSignature(signer, hash, sidechainId, expiration)
-      await relayer.connect(user).transferSidechainRelayer(sidechainId, newRelayer, expiration, signatures)
+      await transferSidechainRelayerHash()
+      expect(await relayer.nonce()).to.equal(1)
       expect(await bridge.owner()).to.equal(newRelayer)
     })
 
+    it('invalid nonce', async () => {
+      await transferSidechainRelayerHash()
+
+      const tx = transferSidechainRelayerHash({ nonce: 0 })
+      await expect(tx).to.be.revertedWith('Invalid signatures')
+    })
+
+    it('invalid to', async () => {
+      await transferSidechainRelayerHash()
+
+      const tx = transferSidechainRelayerHash({ contractAddress: zeroAddress })
+      await expect(tx).to.be.revertedWith('Invalid signatures')
+    })
+
     it('invalid chain id', async () => {
-      const hash = getTransferSidechainRelayerHash(12345, newRelayer)
-      const signatures = await makeSignature(signer, hash, sidechainId, expiration)
-      const tx = relayer.connect(user).transferSidechainRelayer(12345, newRelayer, expiration, signatures)
+      const tx = transferSidechainRelayerHash({ sidechainId: 12345 })
       await expect(tx).to.be.revertedWith('Invalid side chain id')
     })
   })

@@ -1,5 +1,5 @@
 import web3 from 'web3'
-import { network } from 'hardhat'
+import { ethers, network } from 'hardhat'
 import { Contract, BigNumber } from 'ethers'
 import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { toWei, fromWei, toDecimal } from 'web3-utils'
@@ -220,6 +220,15 @@ const makeSignature = async (signer: Account, hash: string, chainid: number, exp
   return await signer.signMessage(toBuffer(msg!))
 }
 
+const makeHashWithNonce = (nonce: number, to: string, encodedSelector: string) => {
+  const msg = web3.utils.encodePacked(
+    { type: 'uint256', value: String(nonce) },
+    { type: 'address', value: to },
+    { type: 'bytes', value: encodedSelector },
+  )
+  return ethers.utils.keccak256(msg!)
+}
+
 const makeExpiration = (duration?: number): number => {
   const dt = new Date()
   return ~~(dt.getTime() / 1000) + (duration ?? 86400)
@@ -247,6 +256,7 @@ export {
   fromEther,
   toBNWei,
   makeSignature,
+  makeHashWithNonce,
   makeExpiration,
   chainid,
   zeroAddress,

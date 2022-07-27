@@ -4,36 +4,27 @@ import { ethers } from 'hardhat'
 import { ContractFactory, Contract } from 'ethers'
 import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { expect } from 'chai'
-import { chainid, makeExpiration, makeSignature, zeroAddress } from '../helpers'
-
-const getHash = (nonce: number, to: string, encodedSelector: string) => {
-  const msg = web3.utils.encodePacked(
-    { type: 'uint256', value: String(nonce) },
-    { type: 'address', value: to },
-    { type: 'bytes', value: encodedSelector },
-  )
-  return ethers.utils.keccak256(msg!)
-}
+import { chainid, makeExpiration, makeSignature, makeHashWithNonce, zeroAddress } from '../helpers'
 
 const getAddSignerHash = (nonce: number, to: string, signer: string) => {
   const funcSig = abi.encodeFunctionSignature('addSigner(address,uint64,bytes)')
   const funcParamsSig = abi.encodeParameters(['address'], [signer])
   const encodedSelector = funcSig + funcParamsSig.slice(2)
-  return getHash(nonce, to, encodedSelector)
+  return makeHashWithNonce(nonce, to, encodedSelector)
 }
 
 const getRemoveSignerHash = (nonce: number, to: string, signer: string) => {
   const funcSig = abi.encodeFunctionSignature('removeSigner(address,uint64,bytes)')
   const funcParamsSig = abi.encodeParameters(['address'], [signer])
   const encodedSelector = funcSig + funcParamsSig.slice(2)
-  return getHash(nonce, to, encodedSelector)
+  return makeHashWithNonce(nonce, to, encodedSelector)
 }
 
 const getUpdateThresholdHash = (nonce: number, to: string, threshold: number) => {
   const funcSig = abi.encodeFunctionSignature('updateThreshold(uint256,uint64,bytes)')
   const funcParamsSig = abi.encodeParameters(['uint256'], [threshold])
   const encodedSelector = funcSig + funcParamsSig.slice(2)
-  return getHash(nonce, to, encodedSelector)
+  return makeHashWithNonce(nonce, to, encodedSelector)
 }
 
 describe('Signers', () => {
