@@ -73,6 +73,12 @@
           "internalType": "address",
           "name": "validator",
           "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256[]",
+          "name": "epochs",
+          "type": "uint256[]"
         }
       ],
       "name": "ValidatorActivated",
@@ -105,6 +111,12 @@
           "internalType": "address",
           "name": "validator",
           "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256[]",
+          "name": "epochs",
+          "type": "uint256[]"
         }
       ],
       "name": "ValidatorDeactivated",
@@ -122,7 +134,7 @@
         {
           "indexed": false,
           "internalType": "uint256",
-          "name": "epoch",
+          "name": "until",
           "type": "uint256"
         }
       ],
@@ -148,6 +160,11 @@
           "internalType": "address",
           "name": "validator",
           "type": "address"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "epochs",
+          "type": "uint256[]"
         }
       ],
       "name": "activateValidator",
@@ -204,6 +221,11 @@
           "internalType": "address",
           "name": "validator",
           "type": "address"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "epochs",
+          "type": "uint256[]"
         }
       ],
       "name": "deactivateValidator",
@@ -267,6 +289,29 @@
     {
       "inputs": [],
       "name": "getCurrentValidators",
+      "outputs": [
+        {
+          "internalType": "address[]",
+          "name": "owners",
+          "type": "address[]"
+        },
+        {
+          "internalType": "address[]",
+          "name": "operators",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "stakes",
+          "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "getNextValidators",
       "outputs": [
         {
           "internalType": "address[]",
@@ -453,6 +498,11 @@
           "type": "bool"
         },
         {
+          "internalType": "bool",
+          "name": "jailed",
+          "type": "bool"
+        },
+        {
           "internalType": "uint256",
           "name": "stakes",
           "type": "uint256"
@@ -461,10 +511,44 @@
           "internalType": "uint256",
           "name": "commissionRate",
           "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "validator",
+          "type": "address"
         },
         {
           "internalType": "uint256",
-          "name": "jailEpoch",
+          "name": "epoch",
+          "type": "uint256"
+        }
+      ],
+      "name": "getValidatorInfo",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "active",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "jailed",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "stakes",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "commissionRate",
           "type": "uint256"
         }
       ],
@@ -560,6 +644,11 @@
           "internalType": "address",
           "name": "operator",
           "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "blocks",
+          "type": "uint256"
         }
       ],
       "name": "slash",
@@ -635,31 +724,6 @@
         }
       ],
       "name": "updateOperator",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address[]",
-          "name": "operators",
-          "type": "address[]"
-        },
-        {
-          "internalType": "uint256[]",
-          "name": "counts",
-          "type": "uint256[]"
-        }
-      ],
-      "name": "updateValidatorBlocks",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "updateValidators",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

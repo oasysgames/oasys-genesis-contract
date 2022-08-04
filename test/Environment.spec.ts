@@ -4,7 +4,7 @@ import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { toWei } from 'web3-utils'
 import { expect } from 'chai'
 
-import { mining, EnvironmentValue } from './helpers'
+import { mining, EnvironmentValue, getBlockNumber } from './helpers'
 
 const initialValue: EnvironmentValue = {
   startBlock: 0,
@@ -55,7 +55,7 @@ describe('Environment', () => {
 
   it('initialize()', async () => {
     await initialize()
-    await expect(initialize()).to.revertedWith('already initialized.')
+    await expect(initialize()).to.revertedWith('AlreadyInitialized()')
   })
 
   describe('updateValue()', async () => {
@@ -63,7 +63,7 @@ describe('Environment', () => {
       await initialize()
 
       const tx = environment.updateValue(initialValue)
-      await expect(tx).to.revertedWith('startEpoch must be future.')
+      await expect(tx).to.revertedWith('PastEpoch()')
     })
   })
 
@@ -101,7 +101,7 @@ describe('Environment', () => {
 
     it('update in last block of epoch', async () => {
       await expectEpoch(100, 198, 2)
-      await expect(updateValue(3, 150)).to.revertedWith('last block of epoch.')
+      await expect(updateValue(3, 150)).to.revertedWith('OnlyNotLastBlock()')
     })
 
     it('update in first block of epoch', async () => {
@@ -144,11 +144,26 @@ describe('Environment', () => {
     })
   })
 
-  it('value()', async () => {
-    const miningAndExpect = async (start: number, end: number, expect_: EnvironmentValue) => {
-      for (let i = start; i <= end; i++) {
-        await mining(i)
-        expectValues(await environment.value(), expect_)
+  it('value() and nextValue()', async () => {
+    type expect = {
+      start: number
+      end: number
+      method: () => Promise<EnvironmentValue>
+      value: EnvironmentValue
+    }
+
+    const miningAndExpect = async (end: number, expects: expect[]) => {
+      const start = (await getBlockNumber()) + 1
+      expect(end > start).to.be.true
+
+      for (let block = start; block <= end; block++) {
+        await mining(block)
+
+        for (let expect of expects) {
+          if (block >= expect.start && block <= expect.end) {
+            expectValues(await expect.method(), expect.value)
+          }
+        }
       }
     }
 
@@ -160,22 +175,61 @@ describe('Environment', () => {
     newValue1.rewardRate += 1
     await environment.updateValue(newValue1)
 
-    await miningAndExpect(0, 299, initialValue)
+    await miningAndExpect(299, [
+      { start: 0, end: 299, method: environment.value, value: initialValue },
+      { start: 0, end: 199, method: environment.nextValue, value: initialValue },
+      { start: 200, end: 299, method: environment.nextValue, value: newValue1 },
+    ])
 
     const newValue2 = { ...newValue1 }
     newValue2.startEpoch = 6
+    newValue2.epochPeriod = 25
     newValue2.rewardRate += 1
     await environment.updateValue(newValue2)
 
-    await miningAndExpect(300, 399, newValue1)
+    await miningAndExpect(399, [
+      { start: 300, end: 399, method: environment.value, value: newValue1 },
+      { start: 300, end: 349, method: environment.nextValue, value: newValue1 },
+      { start: 350, end: 399, method: environment.nextValue, value: newValue2 },
+    ])
 
-    const newValue3 = { ...newValue1 }
-    newValue3.startEpoch = 12
+    const newValue3 = { ...newValue2 }
+    newValue3.startEpoch = 10
     newValue3.rewardRate += 1
     await environment.updateValue(newValue3)
 
-    await miningAndExpect(400, 699, newValue2)
-    await miningAndExpect(700, 710, newValue3)
+    await miningAndExpect(499, [
+      { start: 400, end: 499, method: environment.value, value: newValue2 },
+      { start: 400, end: 474, method: environment.nextValue, value: newValue2 },
+      { start: 475, end: 499, method: environment.nextValue, value: newValue3 },
+    ])
+
+    const newValue4 = { ...newValue3 }
+    newValue4.startEpoch = 12
+    newValue4.rewardRate += 1
+    await environment.updateValue(newValue4)
+
+    await miningAndExpect(539, [
+      { start: 500, end: 539, method: environment.value, value: newValue3 },
+      { start: 500, end: 524, method: environment.nextValue, value: newValue3 },
+      { start: 525, end: 539, method: environment.nextValue, value: newValue4 },
+    ])
+
+    const newValue5 = { ...newValue4 }
+    newValue5.startEpoch = 14
+    newValue5.rewardRate += 1
+    await environment.updateValue(newValue5)
+
+    await miningAndExpect(599, [
+      { start: 540, end: 599, method: environment.value, value: newValue3 },
+      { start: 540, end: 574, method: environment.nextValue, value: newValue3 },
+      { start: 575, end: 599, method: environment.nextValue, value: newValue5 },
+    ])
+
+    await miningAndExpect(649, [
+      { start: 600, end: 649, method: environment.value, value: newValue5 },
+      { start: 600, end: 649, method: environment.nextValue, value: newValue5 },
+    ])
   })
 
   it('epochAndValues()', async () => {

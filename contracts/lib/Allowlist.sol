@@ -1,9 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.12;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import { IAllowlist } from "./IAllowlist.sol";
+
+// Tried to add a zero address.
+error EmptyAddress();
+
+// Address already added.
+error AlreadyAdded();
+
+// Address not found.
+error NotFound();
 
 /**
  * @title Allowlist
@@ -16,6 +25,7 @@ contract Allowlist is IAllowlist, Ownable {
      *************/
 
     address[] private _allowlist;
+    mapping(address => uint256) private _ids;
 
     /********************
      * Public Functions *
@@ -26,8 +36,10 @@ contract Allowlist is IAllowlist, Ownable {
      * @param _address Allowed address.
      */
     function addAddress(address _address) external onlyOwner {
-        require(!_contains(_allowlist, _address), "already added");
+        if (_address == address(0)) revert EmptyAddress();
+        if (_contains(_address)) revert AlreadyAdded();
         _allowlist.push(_address);
+        _ids[_address] = _allowlist.length;
 
         emit AllowlistAdded(_address);
     }
@@ -37,17 +49,15 @@ contract Allowlist is IAllowlist, Ownable {
      * @param _address Removed address.
      */
     function removeAddress(address _address) external onlyOwner {
-        require(_contains(_allowlist, _address), "address not found");
+        if (!_contains(_address)) revert NotFound();
         uint256 length = _allowlist.length;
-        bool addressMatched = false;
-        for (uint256 i = 0; i < length - 1; i++) {
-            if (!addressMatched && _allowlist[i] == _address) {
-                addressMatched = true;
-            }
-            if (addressMatched) {
-                _allowlist[i] = _allowlist[i + 1];
-            }
+        if (length > 1) {
+            uint256 id = _ids[_address];
+            address last = _allowlist[length - 1];
+            _allowlist[id - 1] = last;
+            _ids[last] = id;
         }
+        _ids[_address] = 0;
         _allowlist.pop();
 
         emit AllowlistRemoved(_address);
@@ -68,7 +78,7 @@ contract Allowlist is IAllowlist, Ownable {
         if (owner() == address(0)) {
             return true;
         }
-        return _contains(_allowlist, _address);
+        return _contains(_address);
     }
 
     /**********************
@@ -77,17 +87,10 @@ contract Allowlist is IAllowlist, Ownable {
 
     /**
      * Check if the array of address contains the address.
-     * @param _addresses Array of address.
      * @param _address address.
      * @return Contains of not.
      */
-    function _contains(address[] memory _addresses, address _address) internal pure returns (bool) {
-        uint256 length = _addresses.length;
-        for (uint256 i = 0; i < length; i++) {
-            if (_addresses[i] == _address) {
-                return true;
-            }
-        }
-        return false;
+    function _contains(address _address) internal view returns (bool) {
+        return _ids[_address] > 0;
     }
 }

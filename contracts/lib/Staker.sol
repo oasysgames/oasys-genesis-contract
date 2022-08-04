@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.12;
 
 import { Constants } from "./Constants.sol";
 import { Math } from "./Math.sol";
@@ -111,7 +111,8 @@ library Staker {
         currents = new uint256[](_validators.length);
         stakes = new uint256[](_validators.length);
         unstakes = new uint256[](_validators.length);
-        for (uint256 i = 0; i < _validators.length; i++) {
+        uint256 length = _validators.length;
+        for (uint256 i = 0; i < length; i++) {
             uint256 current = getStake(staker, _validators[i], token, epoch);
             uint256 next = getStake(staker, _validators[i], token, epoch + 1);
             currents[i] = current;
@@ -138,7 +139,8 @@ library Staker {
         Token.Type token,
         uint256 epoch
     ) internal view returns (uint256 totalStake) {
-        for (uint256 i = 0; i < validators.length; i++) {
+        uint256 length = validators.length;
+        for (uint256 i = 0; i < length; i++) {
             totalStake += getStake(staker, validators[i], token, epoch);
         }
     }
