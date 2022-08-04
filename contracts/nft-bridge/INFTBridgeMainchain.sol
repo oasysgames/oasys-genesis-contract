@@ -6,7 +6,7 @@ interface INFTBridgeMainchain {
      * Events *
      **********/
 
-    event DepositeInitiated(
+    event DepositInitiated(
         uint256 indexed depositIndex,
         address indexed mainchainERC721,
         uint256 indexed tokenId,
@@ -15,7 +15,7 @@ interface INFTBridgeMainchain {
         address sideTo
     );
 
-    event DepositeRejected(uint256 indexed depositIndex);
+    event DepositRejected(uint256 indexed depositIndex);
 
     event WithdrawalFinalized(
         uint256 indexed depositIndex,

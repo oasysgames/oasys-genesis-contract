@@ -18,11 +18,11 @@ interface EnvironmentValue {
 }
 
 interface ValidatorInfo {
-  operator: string
+  operator?: string
   active: boolean
+  jailed: boolean
   stakes: BigNumber
   commissionRate: BigNumber
-  jailEpoch: BigNumber
 }
 
 interface StakerInfo {
@@ -63,24 +63,28 @@ class Validator {
     return this._contract.connect(sender || this.owner).updateCommissionRate(newRate, { gasPrice })
   }
 
-  activateValidator(sender?: Account) {
-    return this._contract.connect(sender || this.operator).activateValidator(this.owner.address, { gasPrice })
+  activateValidator(epochs: number[], sender?: Account) {
+    return this._contract.connect(sender || this.operator).activateValidator(this.owner.address, epochs, { gasPrice })
   }
 
-  deactivateValidator(sender?: Account) {
-    return this._contract.connect(sender || this.operator).deactivateValidator(this.owner.address, { gasPrice })
+  deactivateValidator(epochs: number[], sender?: Account) {
+    return this._contract.connect(sender || this.operator).deactivateValidator(this.owner.address, epochs, { gasPrice })
   }
 
   claimCommissions(sender?: Account, epochs?: number) {
     return this._contract.connect(sender || this.owner).claimCommissions(this.owner.address, epochs ?? 0, { gasPrice })
   }
 
-  async getInfo(): Promise<ValidatorInfo> {
-    return await this._contract.getValidatorInfo(this.owner.address)
+  async getInfo(epoch?: number): Promise<ValidatorInfo> {
+    if (epoch) {
+      return await this._contract.functions['getValidatorInfo(address,uint256)'](this.owner.address, epoch)
+    } else {
+      return await this._contract.functions['getValidatorInfo(address)'](this.owner.address)
+    }
   }
 
-  async slash(validator: Validator) {
-    return await this._contract.connect(this.operator).slash(validator.operator.address, { gasPrice })
+  async slash(validator: Validator, blocks: number) {
+    return await this._contract.connect(this.operator).slash(validator.operator.address, blocks, { gasPrice })
   }
 
   async expectStakes(epoch: number, expectStakers: Staker[], expectEthers: string[], page = 1, perPage = 50) {

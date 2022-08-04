@@ -43,7 +43,7 @@
           "type": "address"
         }
       ],
-      "name": "DepositeInitiated",
+      "name": "DepositInitiated",
       "type": "event"
     },
     {
@@ -56,7 +56,7 @@
           "type": "uint256"
         }
       ],
-      "name": "DepositeRejected",
+      "name": "DepositRejected",
       "type": "event"
     },
     {

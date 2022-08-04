@@ -115,7 +115,7 @@ describe('NFTBridgeMainchain', () => {
       const tx = await deposit()
       expect(await token.ownerOf(tokenId)).to.equal(bridge.address)
       await expect(tx)
-        .to.emit(bridge, 'DepositeInitiated')
+        .to.emit(bridge, 'DepositInitiated')
         .withArgs(0, token.address, tokenId, sidechainId, user.address, user.address)
     })
 
@@ -140,7 +140,7 @@ describe('NFTBridgeMainchain', () => {
 
       const tx = await rejectDeposit()
       expect(await token.ownerOf(tokenId)).to.equal(user.address)
-      await expect(tx).to.emit(bridge, 'DepositeRejected').withArgs(depositIndex)
+      await expect(tx).to.emit(bridge, 'DepositRejected').withArgs(depositIndex)
     })
 
     it('invalid chain id', async () => {

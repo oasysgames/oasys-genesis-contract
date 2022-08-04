@@ -1,15 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.12;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+// msg.value and amount did not match.
+error AmountMismatched();
+
+// Amount is not zero.
+error NotZeroAmount();
+
+// OAS or ERC20 transfer failed.
+error TransferFailed(Token.Type token);
+
+// Unknown token type.
+error UnknownToken();
 
 library Token {
     /**
      * Type of tokens.
      *
      * OAS  - Native token of Oasys Blockchain
-     * wOAS - Wrapperd OAS
+     * wOAS - Wrapped OAS
      * sOAS - Stakable OAS
      */
     enum Type {
@@ -18,7 +30,7 @@ library Token {
         sOAS
     }
 
-    // Wrapperd OAS
+    // Wrapped OAS
     IERC20 public constant WOAS = IERC20(0x5200000000000000000000000000000000000001);
     // Stakable OAS
     IERC20 public constant SOAS = IERC20(0x5200000000000000000000000000000000000002);
@@ -35,10 +47,11 @@ library Token {
         uint256 amount
     ) internal {
         if (token == Type.OAS) {
-            require(msg.value == amount, "msg.value and amount not match.");
+            if (msg.value != amount) revert AmountMismatched();
         } else {
-            require(msg.value == 0, "msg.value must be zero.");
-            require(_getERC20(token).transferFrom(from, address(this), amount), "ERC20 transfer failed.");
+            if (msg.value != 0) revert NotZeroAmount();
+            bool success = _getERC20(token).transferFrom(from, address(this), amount);
+            if (!success) revert TransferFailed(token);
         }
     }
 
@@ -53,12 +66,15 @@ library Token {
         address to,
         uint256 amount
     ) internal {
+        bool success;
         if (token == Type.OAS) {
             // solhint-disable-next-line avoid-low-level-calls
-            (bool success, ) = to.call{ value: amount }(new bytes(0));
-            require(success, "OAS transfer failed.");
+            (success, ) = to.call{ value: amount }("");
         } else {
-            require(_getERC20(token).transfer(to, amount), "ERC20 transfer failed.");
+            success = _getERC20(token).transfer(to, amount);
+        }
+        if (!success) {
+            revert TransferFailed(token);
         }
     }
 
@@ -68,6 +84,6 @@ library Token {
         } else if (token == Type.sOAS) {
             return SOAS;
         }
-        revert("unsupported token.");
+        revert UnknownToken();
     }
 }

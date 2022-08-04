@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.12;
 
 import { Constants } from "./Constants.sol";
 import { Math } from "./Math.sol";
@@ -8,6 +8,18 @@ import { UpdateHistories } from "./UpdateHistories.sol";
 import { Token } from "./Token.sol";
 import { IEnvironment } from "../IEnvironment.sol";
 import { IStakeManager } from "../IStakeManager.sol";
+
+// Validator is already joined.
+error AlreadyJoined();
+
+// Operator is zero address.
+error EmptyAddress();
+
+// Operator is same as owner.
+error SameAsOwner();
+
+// Commission rate is too large.
+error OverRate();
 
 /**
  * @title Validator
@@ -20,26 +32,33 @@ library Validator {
      ********************/
 
     function join(IStakeManager.Validator storage validator, address operator) internal {
-        require(validator.owner == address(0), "already joined.");
+        if (validator.owner != address(0)) revert AlreadyJoined();
 
         validator.owner = msg.sender;
-        validator.active = true;
         updateOperator(validator, operator);
     }
 
     function updateOperator(IStakeManager.Validator storage validator, address operator) internal {
-        require(operator != address(0), "operator is zero address.");
-        require(operator != validator.owner, "operator is same as owner.");
+        if (operator == address(0)) revert EmptyAddress();
+        if (operator == validator.owner) revert SameAsOwner();
 
         validator.operator = operator;
     }
 
-    function activate(IStakeManager.Validator storage validator) internal {
-        validator.active = true;
+    function activate(
+        IStakeManager.Validator storage validator,
+        uint256 epoch,
+        uint256[] memory epochs
+    ) internal {
+        _updateInactives(validator, epoch, epochs, false);
     }
 
-    function deactivate(IStakeManager.Validator storage validator) internal {
-        validator.active = false;
+    function deactivate(
+        IStakeManager.Validator storage validator,
+        uint256 epoch,
+        uint256[] memory epochs
+    ) internal {
+        _updateInactives(validator, epoch, epochs, true);
     }
 
     function updateCommissionRate(
@@ -47,7 +66,8 @@ library Validator {
         IEnvironment environment,
         uint256 newRate
     ) internal {
-        require(newRate <= Constants.MAX_COMMISSION_RATE, "must be less than 100.");
+        if (newRate > Constants.MAX_COMMISSION_RATE) revert OverRate();
+
         validator.lastCommissionUpdates.set(validator.commissionRates, environment.epoch() + 1, newRate);
     }
 
@@ -84,26 +104,37 @@ library Validator {
         }
     }
 
-    function slash(IStakeManager.Validator storage validator, IEnvironment environment) internal {
-        validator.slashes[environment.epoch()] += 1;
+    function slash(
+        IStakeManager.Validator storage validator,
+        IEnvironment.EnvironmentValue memory env,
+        uint256 epoch,
+        uint256 blocks
+    ) internal returns (uint256 until) {
+        if (validator.blocks[epoch] == 0) {
+            validator.blocks[epoch] = blocks;
+        }
+
+        uint256 slashes = validator.slashes[epoch] + 1;
+        validator.slashes[epoch] = slashes;
+        if (slashes >= env.jailThreshold && !validator.jails[epoch + 1]) {
+            until = epoch + env.jailPeriod;
+            while (epoch < until) {
+                epoch++;
+                validator.jails[epoch] = true;
+            }
+        }
     }
 
     /******************
      * View Functions *
      ******************/
 
-    function isCandidates(IStakeManager.Validator storage validator, IEnvironment environment)
-        internal
-        view
-        returns (bool)
-    {
-        if (!validator.active) return false;
+    function isJailed(IStakeManager.Validator storage validator, uint256 epoch) internal view returns (bool) {
+        return validator.jails[epoch];
+    }
 
-        IEnvironment.EnvironmentValue memory env = environment.value();
-        uint256 epoch = environment.epoch();
-        if (validator.jailEpoch > 0 && epoch - validator.jailEpoch < env.jailPeriod) return false;
-        if (getTotalStake(validator, epoch + 1) < env.validatorThreshold) return false;
-        return true;
+    function isInactive(IStakeManager.Validator storage validator, uint256 epoch) internal view returns (bool) {
+        return validator.inactives[epoch];
     }
 
     function getCommissionRate(IStakeManager.Validator storage validator, uint256 epoch)
@@ -123,12 +154,10 @@ library Validator {
         IEnvironment.EnvironmentValue memory env,
         uint256 epoch
     ) internal view returns (uint256) {
+        if (isInactive(validator, epoch) || isJailed(validator, epoch)) return 0;
+
         uint256 _stake = getTotalStake(validator, epoch);
         if (_stake == 0) return 0;
-
-        uint256 blocks = validator.blocks[epoch];
-        uint256 slashes = validator.slashes[epoch];
-        if (blocks == 0 || slashes >= blocks) return 0;
 
         uint256 rewards = (_stake *
             Math.percent(env.rewardRate, Constants.MAX_REWARD_RATE, Constants.REWARD_PRECISION)) /
@@ -141,7 +170,13 @@ library Validator {
             Constants.REWARD_PRECISION
         );
         rewards /= 10**Constants.REWARD_PRECISION;
-        return Math.share(rewards, blocks - slashes, blocks, Constants.REWARD_PRECISION);
+
+        uint256 slashes = validator.slashes[epoch];
+        if (slashes > 0) {
+            uint256 blocks = validator.blocks[epoch];
+            rewards = Math.share(rewards, blocks - slashes, blocks, Constants.REWARD_PRECISION);
+        }
+        return rewards;
     }
 
     function getRewardsWithoutCommissions(
@@ -195,5 +230,24 @@ library Validator {
         returns (uint256, uint256)
     {
         return (validator.blocks[epoch], validator.slashes[epoch]);
+    }
+
+    /*********************
+     * Private Functions *
+     *********************/
+
+    function _updateInactives(
+        IStakeManager.Validator storage validator,
+        uint256 epoch,
+        uint256[] memory epochs,
+        bool status
+    ) private {
+        uint256 length = epochs.length;
+        for (uint256 i = 0; i < length; i++) {
+            uint256 _epoch = epochs[i];
+            if (_epoch > epoch && validator.inactives[_epoch] != status) {
+                validator.inactives[_epoch] = status;
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.12;
 
 /**
  * @title IAllowlist
@@ -11,8 +11,8 @@ interface IAllowlist {
      * Events *
      **********/
 
-    event AllowlistAdded(address _address);
-    event AllowlistRemoved(address _address);
+    event AllowlistAdded(address indexed _address);
+    event AllowlistRemoved(address indexed _address);
 
     /********************
      * Public Functions *

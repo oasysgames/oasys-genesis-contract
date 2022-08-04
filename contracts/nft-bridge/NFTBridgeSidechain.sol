@@ -110,7 +110,7 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
             mainchainERC721
         );
         if (sidechainERC721 == address(0)) {
-            emit DepositeFailed(
+            emit DepositFailed(
                 mainchainId,
                 depositIndex,
                 mainchainERC721,
@@ -131,7 +131,7 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
             _depositIndexes[mainchainId][depositIndex] = true;
             _depositIndexMap[sidechainERC721][tokenId] = depositIndex;
 
-            emit DepositeFinalized(
+            emit DepositFinalized(
                 mainchainId,
                 depositIndex,
                 mainchainERC721,
@@ -141,7 +141,7 @@ contract NFTBridgeSidechain is INFTBridgeSidechain, Ownable {
                 sideTo
             );
         } catch {
-            emit DepositeFailed(
+            emit DepositFailed(
                 mainchainId,
                 depositIndex,
                 mainchainERC721,

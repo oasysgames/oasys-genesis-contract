@@ -218,7 +218,7 @@ describe('NFTBridgeSidechain', () => {
       expect(await token.balanceOf(user.address)).to.equal(1)
       expect(await token.ownerOf(tokenId)).to.equal(user.address)
       await expect(tx)
-        .to.emit(bridge, 'DepositeFinalized')
+        .to.emit(bridge, 'DepositFinalized')
         .withArgs(mainchainId, depositIndex, mainchainERC721, sidechainERC721, tokenId, mainFrom.address, user.address)
     })
 
@@ -231,7 +231,7 @@ describe('NFTBridgeSidechain', () => {
     it('sidechain erc721 not found', async () => {
       const tx = await finalizeDeposit()
       await expect(tx)
-        .to.emit(bridge, 'DepositeFailed')
+        .to.emit(bridge, 'DepositFailed')
         .withArgs(mainchainId, depositIndex, mainchainERC721, zeroAddress, tokenId, mainFrom.address, user.address)
     })
 
@@ -248,7 +248,7 @@ describe('NFTBridgeSidechain', () => {
 
       const tx = await finalizeDeposit(undefined, depositIndex + 1)
       await expect(tx)
-        .to.emit(bridge, 'DepositeFailed')
+        .to.emit(bridge, 'DepositFailed')
         .withArgs(
           mainchainId,
           depositIndex + 1,

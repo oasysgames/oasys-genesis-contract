@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.12;
 
 import { Constants } from "./Constants.sol";
 import { IEnvironment } from "../IEnvironment.sol";
+
+error ValidationError(string detail);
 
 /**
  * @title EnvironmentValue
@@ -26,11 +28,23 @@ library EnvironmentValue {
     }
 
     function validate(IEnvironment.EnvironmentValue memory value) internal pure {
-        require(value.blockPeriod >= 1, "blockPeriod is too small.");
-        require(value.epochPeriod >= 3, "epochPeriod is too small.");
-        require(value.rewardRate <= Constants.MAX_REWARD_RATE, "rewardRate is too large.");
-        require(value.validatorThreshold >= 1, "validatorThreshold is too small.");
-        require(value.jailThreshold >= 1, "jailThreshold is too small.");
-        require(value.jailPeriod >= 1, "jailPeriod is too small.");
+        if (value.blockPeriod < Constants.MIN_BLOCK_PERIOD) {
+            revert ValidationError("blockPeriod is too small.");
+        }
+        if (value.epochPeriod < Constants.MIN_EPOCH_PERIOD) {
+            revert ValidationError("epochPeriod is too small.");
+        }
+        if (value.rewardRate > Constants.MAX_REWARD_RATE) {
+            revert ValidationError("rewardRate is too large.");
+        }
+        if (value.validatorThreshold < Constants.MIN_VALIDATOR_THRESHOLD) {
+            revert ValidationError("validatorThreshold is too small.");
+        }
+        if (value.jailThreshold < Constants.MIN_JAIL_THRESHOLD) {
+            revert ValidationError("jailThreshold is too small.");
+        }
+        if (value.jailPeriod < Constants.MIN_JAIL_PERIOD) {
+            revert ValidationError("jailPeriod is too small.");
+        }
     }
 }

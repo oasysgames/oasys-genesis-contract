@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.12;
 
 import { System } from "./System.sol";
 import { IEnvironment } from "./IEnvironment.sol";
 import { EnvironmentValue as EnvironmentValueLib } from "./lib/EnvironmentValue.sol";
+
+// Not executable in the last block of epoch.
+error OnlyNotLastBlock();
+
+// Epoch must be the future.
+error PastEpoch();
 
 /**
  * @title Environment
@@ -38,9 +44,8 @@ contract Environment is IEnvironment, System {
      * @inheritdoc IEnvironment
      */
     function updateValue(EnvironmentValue memory newValue) external onlyCoinbase {
-        // solhint-disable-next-line reason-string
-        require(!isLastBlock(), "not executable in the last block of epoch.");
-        require(newValue.startEpoch > epoch(), "startEpoch must be future.");
+        if (isLastBlock()) revert OnlyNotLastBlock();
+        if (newValue.startEpoch <= epoch()) revert PastEpoch();
 
         EnvironmentValue storage next = _getNext();
         if (next.started(block.number)) {
@@ -66,7 +71,7 @@ contract Environment is IEnvironment, System {
     /**
      * @inheritdoc IEnvironment
      */
-    function isFirstBlock() public view returns (bool) {
+    function isFirstBlock() external view returns (bool) {
         return (block.number) % value().epochPeriod == 0;
     }
 
@@ -89,8 +94,10 @@ contract Environment is IEnvironment, System {
      * @inheritdoc IEnvironment
      */
     function nextValue() external view returns (EnvironmentValue memory) {
+        EnvironmentValue memory current = value();
         EnvironmentValue storage next = _getNext();
-        return next.started(block.number + 1) ? next : _getCurrent();
+        uint256 nextStartBlock = current.startBlock + (epoch() - current.startEpoch + 1) * current.epochPeriod;
+        return next.started(nextStartBlock) ? next : current;
     }
 
     /**
@@ -121,11 +128,7 @@ contract Environment is IEnvironment, System {
      * @return Environment value.
      */
     function _getNext() internal view returns (EnvironmentValue storage) {
-        uint256 length = values.length;
-        if (length == 1) {
-            return values[0];
-        }
-        return values[length - 1];
+        return values[values.length - 1];
     }
 
     /**
