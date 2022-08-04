@@ -1,7 +1,9 @@
-import { network } from 'hardhat'
+import web3 from 'web3'
+import { ethers, network } from 'hardhat'
 import { Contract, BigNumber } from 'ethers'
 import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { toWei, fromWei, toDecimal } from 'web3-utils'
+import { toBuffer } from 'ethereumjs-util'
 import { expect } from 'chai'
 
 interface EnvironmentValue {
@@ -212,6 +214,32 @@ const fromEther = (ether: string) => BigNumber.from(toWei(ether))
 
 const toBNWei = (ether: string) => BigNumber.from(toWei(ether))
 
+const makeSignature = async (signer: Account, hash: string, chainid: number, expiration: number): Promise<string> => {
+  const values = [
+    { type: 'bytes32', value: hash },
+    { type: 'uint256', value: String(chainid) },
+    { type: 'uint64', value: String(expiration) },
+  ]
+  const msg = web3.utils.encodePacked(...values)
+  return await signer.signMessage(toBuffer(msg!))
+}
+
+const makeHashWithNonce = (nonce: number, to: string, encodedSelector: string) => {
+  const msg = web3.utils.encodePacked(
+    { type: 'uint256', value: String(nonce) },
+    { type: 'address', value: to },
+    { type: 'bytes', value: encodedSelector },
+  )
+  return ethers.utils.keccak256(msg!)
+}
+
+const makeExpiration = (duration?: number): number => {
+  const dt = new Date()
+  return ~~(dt.getTime() / 1000) + (duration ?? 86400)
+}
+
+const chainid = network.config.chainId!
+
 const zeroAddress = '0x0000000000000000000000000000000000000000'
 
 const Token = { OAS: 0, wOAS: 1, sOAS: 2 }
@@ -231,6 +259,10 @@ export {
   mining,
   fromEther,
   toBNWei,
+  makeSignature,
+  makeHashWithNonce,
+  makeExpiration,
+  chainid,
   zeroAddress,
   Token,
   WOASAddress,

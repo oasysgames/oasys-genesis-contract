@@ -101,12 +101,13 @@ contract SOAS is ERC20 {
      * @param amount Amount of the SOAS.
      */
     function claim(uint256 amount) external {
-        require(amount > 0, "amount is zero");
+        if (amount == 0) revert NoAmount();
 
         uint256 currentClaimableOAS = getClaimableOAS(msg.sender) - claimInfo[msg.sender].claimed;
         if (amount > currentClaimableOAS) revert OverAmount();
 
         claimInfo[msg.sender].claimed += amount;
+
         _burn(msg.sender, amount);
         (bool success, ) = msg.sender.call{ value: amount }("");
         if (!success) revert TransferFailed();
@@ -119,7 +120,7 @@ contract SOAS is ERC20 {
      * @param amount Amount of the SOAS.
      */
     function renounce(uint256 amount) external {
-        require(amount > 0, "amount is zero");
+        if (amount == 0) revert NoAmount();
 
         ClaimInfo memory info = claimInfo[msg.sender];
         if (amount > info.amount - info.claimed) revert OverAmount();

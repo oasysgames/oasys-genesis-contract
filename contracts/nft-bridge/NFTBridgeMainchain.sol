@@ -10,7 +10,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
      * Contract Variables *
      **********************/
 
-    DepositInfo[] private depositInfos;
+    DepositInfo[] private _depositInfos;
 
     /********************
      * Public Functions *
@@ -25,7 +25,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         view
         returns (DepositInfo memory)
     {
-        return depositInfos[depositIndex];
+        return _depositInfos[depositIndex];
     }
 
     /**
@@ -41,17 +41,19 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         uint256 sidechainId,
         address sideTo
     ) external {
+        require(sideTo != address(0), "sideTo is zero address.");
+
         IERC721(mainchainERC721).transferFrom(
             msg.sender,
             address(this),
             tokenId
         );
-        depositInfos.push(
+        _depositInfos.push(
             DepositInfo(mainchainERC721, tokenId, msg.sender, address(0))
         );
 
         emit DepositInitiated(
-            depositInfos.length - 1,
+            _depositInfos.length - 1,
             mainchainERC721,
             tokenId,
             sidechainId,
@@ -71,7 +73,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
     {
         require(mainchainId == block.chainid, "Invalid main chain id.");
 
-        DepositInfo storage mainInfo = depositInfos[depositIndex];
+        DepositInfo storage mainInfo = _depositInfos[depositIndex];
         require(mainInfo.mainTo == address(0), "already rejected");
 
         mainInfo.mainTo = mainInfo.mainFrom;
@@ -102,18 +104,20 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
         address mainTo
     ) external onlyOwner {
         require(mainchainId == block.chainid, "Invalid main chain id.");
+        require(mainTo != address(0), "mainTo is zero address.");
 
-        DepositInfo storage mainInfo = depositInfos[depositIndex];
+        DepositInfo storage mainInfo = _depositInfos[depositIndex];
         require(mainInfo.mainTo == address(0), "already withdraw");
 
-        mainInfo.mainTo = mainTo;
         try
             IERC721(mainInfo.mainchainERC721).safeTransferFrom(
                 address(this),
-                mainInfo.mainTo,
+                mainTo,
                 mainInfo.tokenId
             )
         {
+            mainInfo.mainTo = mainTo;
+
             emit WithdrawalFinalized(
                 depositIndex,
                 sidechainId,
@@ -145,5 +149,19 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
     {
         require(mainchainId == block.chainid, "Invalid main chain id.");
         super.transferOwnership(newRelayer);
+    }
+
+    /**
+     * Prohibit the direct transfer of ownership.
+     */
+    function transferOwnership(address newOwner) public override {
+        revert("Transfer is prohibited.");
+    }
+
+    /**
+     * Prohibit the renonce of ownership.
+     */
+    function renounceOwnership() public override {
+        revert("Not renounceable.");
     }
 }

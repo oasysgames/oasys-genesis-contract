@@ -40,6 +40,7 @@ contract NFTBridgeRelayer is Signers {
     function rejectDeposit(
         uint256 mainchainId,
         uint256 depositIndex,
+        uint64 expiration,
         bytes memory signatures
     ) external {
         bytes32 _hash = keccak256(
@@ -49,7 +50,10 @@ contract NFTBridgeRelayer is Signers {
                 depositIndex
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         INFTBridgeMainchain(mainchainBridge).rejectDeposit(
             mainchainId,
@@ -64,6 +68,7 @@ contract NFTBridgeRelayer is Signers {
         uint256 withdrawalIndex,
         address sideFrom,
         address mainTo,
+        uint64 expiration,
         bytes memory signatures
     ) external {
         bytes32 _hash = keccak256(
@@ -77,7 +82,10 @@ contract NFTBridgeRelayer is Signers {
                 mainTo
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         INFTBridgeMainchain(mainchainBridge).finalizeWithdrawal(
             mainchainId,
@@ -92,21 +100,31 @@ contract NFTBridgeRelayer is Signers {
     function transferMainchainRelayer(
         uint256 mainchainId,
         address newRelayer,
+        uint64 expiration,
         bytes memory signatures
     ) external {
         bytes32 _hash = keccak256(
-            abi.encodeWithSelector(
-                INFTBridgeMainchain.transferMainchainRelayer.selector,
-                mainchainId,
-                newRelayer
+            abi.encodePacked(
+                nonce,
+                address(this),
+                abi.encodeWithSelector(
+                    INFTBridgeMainchain.transferMainchainRelayer.selector,
+                    mainchainId,
+                    newRelayer
+                )
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         INFTBridgeMainchain(mainchainBridge).transferMainchainRelayer(
             mainchainId,
             newRelayer
         );
+
+        nonce++;
     }
 
     function createSidechainERC721(
@@ -115,6 +133,7 @@ contract NFTBridgeRelayer is Signers {
         address mainERC721,
         string memory name,
         string memory symbol,
+        uint64 expiration,
         bytes memory signatures
     ) external {
         bytes32 _hash = keccak256(
@@ -127,7 +146,10 @@ contract NFTBridgeRelayer is Signers {
                 symbol
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         INFTBridgeSidechain(sidechainBridge).createSidechainERC721(
             sidechainId,
@@ -146,6 +168,7 @@ contract NFTBridgeRelayer is Signers {
         uint256 tokenId,
         address mainFrom,
         address sideTo,
+        uint64 expiration,
         bytes memory signatures
     ) external {
         bytes32 _hash = keccak256(
@@ -160,7 +183,10 @@ contract NFTBridgeRelayer is Signers {
                 sideTo
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         INFTBridgeSidechain(sidechainBridge).finalizeDeposit(
             sidechainId,
@@ -176,6 +202,7 @@ contract NFTBridgeRelayer is Signers {
     function rejectWithdrawal(
         uint256 sidechainId,
         uint256 withdrawalIndex,
+        uint64 expiration,
         bytes memory signatures
     ) external {
         bytes32 _hash = keccak256(
@@ -185,7 +212,10 @@ contract NFTBridgeRelayer is Signers {
                 withdrawalIndex
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         INFTBridgeSidechain(sidechainBridge).rejectWithdrawal(
             sidechainId,
@@ -196,20 +226,30 @@ contract NFTBridgeRelayer is Signers {
     function transferSidechainRelayer(
         uint256 sidechainId,
         address newRelayer,
+        uint64 expiration,
         bytes memory signatures
     ) external {
         bytes32 _hash = keccak256(
-            abi.encodeWithSelector(
-                INFTBridgeSidechain.transferSidechainRelayer.selector,
-                sidechainId,
-                newRelayer
+            abi.encodePacked(
+                nonce,
+                address(this),
+                abi.encodeWithSelector(
+                    INFTBridgeSidechain.transferSidechainRelayer.selector,
+                    sidechainId,
+                    newRelayer
+                )
             )
         );
-        require(verifySignatures(_hash, signatures), "Invalid signatures");
+        require(
+            verifySignatures(_hash, expiration, signatures),
+            "Invalid signatures"
+        );
 
         INFTBridgeSidechain(sidechainBridge).transferSidechainRelayer(
             sidechainId,
             newRelayer
         );
+
+        nonce++;
     }
 }
