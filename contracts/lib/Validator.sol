@@ -242,7 +242,8 @@ library Validator {
         uint256[] memory epochs,
         bool status
     ) private {
-        for (uint256 i = 0; i < epochs.length; i++) {
+        uint256 length = epochs.length;
+        for (uint256 i = 0; i < length; i++) {
             uint256 _epoch = epochs[i];
             if (_epoch > epoch && validator.inactives[_epoch] != status) {
                 validator.inactives[_epoch] = status;

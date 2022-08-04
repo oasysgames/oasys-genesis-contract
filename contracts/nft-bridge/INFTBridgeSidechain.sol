@@ -14,7 +14,7 @@ interface INFTBridgeSidechain {
         string symbol
     );
 
-    event DepositeFinalized(
+    event DepositFinalized(
         uint256 indexed mainchainId,
         uint256 indexed depositIndex,
         address mainchainERC721,
@@ -24,7 +24,7 @@ interface INFTBridgeSidechain {
         address sideTo
     );
 
-    event DepositeFailed(
+    event DepositFailed(
         uint256 indexed mainchainId,
         uint256 indexed depositIndex,
         address mainchainERC721,

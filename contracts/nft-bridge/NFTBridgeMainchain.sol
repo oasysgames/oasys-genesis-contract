@@ -50,7 +50,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
             DepositInfo(mainchainERC721, tokenId, msg.sender, address(0))
         );
 
-        emit DepositeInitiated(
+        emit DepositInitiated(
             depositInfos.length - 1,
             mainchainERC721,
             tokenId,
@@ -81,7 +81,7 @@ contract NFTBridgeMainchain is INFTBridgeMainchain, Ownable {
             mainInfo.tokenId
         );
 
-        emit DepositeRejected(depositIndex);
+        emit DepositRejected(depositIndex);
     }
 
     /**

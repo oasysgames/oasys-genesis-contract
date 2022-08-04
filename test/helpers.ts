@@ -28,6 +28,8 @@ interface StakerInfo {
   unstakes: BigNumber
 }
 
+const gasPrice = 0
+
 class Validator {
   constructor(private _contract: Contract, public owner: Account, public operator: Account) {}
 
@@ -35,38 +37,40 @@ class Validator {
     const contract = this._contract.connect(sender || this.owner)
     amount = toWei(amount)
     if (token === 0) {
-      return contract.stake(validator.owner.address, token, amount, { value: amount })
+      return contract.stake(validator.owner.address, token, amount, { gasPrice, value: amount })
     } else {
-      return contract.stake(validator.owner.address, token, amount)
+      return contract.stake(validator.owner.address, token, amount, { gasPrice })
     }
   }
 
   unstake(token: number, validator: Validator, amount: string, sender?: Account) {
-    return this._contract.connect(sender || this.owner).unstake(validator.owner.address, token, toWei(amount))
+    return this._contract
+      .connect(sender || this.owner)
+      .unstake(validator.owner.address, token, toWei(amount), { gasPrice })
   }
 
   joinValidator(operator?: string) {
-    return this._contract.connect(this.owner).joinValidator(operator || this.operator.address)
+    return this._contract.connect(this.owner).joinValidator(operator || this.operator.address, { gasPrice })
   }
 
   updateOperator(newOperator: string, sender?: Account) {
-    return this._contract.connect(sender || this.owner).updateOperator(newOperator)
+    return this._contract.connect(sender || this.owner).updateOperator(newOperator, { gasPrice })
   }
 
   updateCommissionRate(newRate: number, sender?: Account) {
-    return this._contract.connect(sender || this.owner).updateCommissionRate(newRate)
+    return this._contract.connect(sender || this.owner).updateCommissionRate(newRate, { gasPrice })
   }
 
   activateValidator(epochs: number[], sender?: Account) {
-    return this._contract.connect(sender || this.operator).activateValidator(this.owner.address, epochs)
+    return this._contract.connect(sender || this.operator).activateValidator(this.owner.address, epochs, { gasPrice })
   }
 
   deactivateValidator(epochs: number[], sender?: Account) {
-    return this._contract.connect(sender || this.operator).deactivateValidator(this.owner.address, epochs)
+    return this._contract.connect(sender || this.operator).deactivateValidator(this.owner.address, epochs, { gasPrice })
   }
 
   claimCommissions(sender?: Account, epochs?: number) {
-    return this._contract.connect(sender || this.owner).claimCommissions(this.owner.address, epochs ?? 0)
+    return this._contract.connect(sender || this.owner).claimCommissions(this.owner.address, epochs ?? 0, { gasPrice })
   }
 
   async getInfo(epoch?: number): Promise<ValidatorInfo> {
@@ -78,7 +82,7 @@ class Validator {
   }
 
   async slash(validator: Validator, blocks: number) {
-    return await this._contract.connect(this.operator).slash(validator.operator.address, blocks)
+    return await this._contract.connect(this.operator).slash(validator.operator.address, blocks, { gasPrice })
   }
 
   async expectStakes(epoch: number, expectStakers: Staker[], expectEthers: string[], page = 1, perPage = 50) {
@@ -126,22 +130,22 @@ class Staker {
   stake(token: number, validator: Validator, amount: string) {
     amount = toWei(amount)
     if (token === 0) {
-      return this.contract.stake(validator.owner.address, token, amount, { value: amount })
+      return this.contract.stake(validator.owner.address, token, amount, { gasPrice, value: amount })
     } else {
-      return this.contract.stake(validator.owner.address, token, amount)
+      return this.contract.stake(validator.owner.address, token, amount, { gasPrice })
     }
   }
 
   unstake(token: number, validator: Validator, amount: string) {
-    return this.contract.unstake(validator.owner.address, token, toWei(amount))
+    return this.contract.unstake(validator.owner.address, token, toWei(amount), { gasPrice })
   }
 
   claimRewards(validator: Validator, epochs: number) {
-    return this.contract.claimRewards(validator.owner.address, epochs)
+    return this.contract.claimRewards(validator.owner.address, epochs, { gasPrice })
   }
 
   claimUnstakes() {
-    return this.contract.claimUnstakes()
+    return this.contract.claimUnstakes({ gasPrice })
   }
 
   async expectRewards(expectEther: string, validator: Validator, epochs?: number) {
