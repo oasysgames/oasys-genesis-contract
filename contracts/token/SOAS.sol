@@ -3,16 +3,20 @@ pragma solidity 0.8.12;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
+// Invalid mint destinaition.
 error InvalidDestination();
 
-// SOAS is already minted.
-error AlreadyMinted();
+// Already claimer address.
+error AlreadyClaimer();
 
 // Invalid since or until.
 error InvalidClaimPeriod();
 
 // OAS is zero.
 error NoAmount();
+
+// Invalid minter address.
+error InvalidMinter();
 
 // Over claimable OAS.
 error OverAmount();
@@ -48,8 +52,9 @@ contract SOAS is ERC20 {
      * Contract Variables *
      **********************/
 
-    address public staking;
-    mapping(address => ClaimInfo) private claimInfo;
+    address[] public allowedAddresses;
+    mapping(address => ClaimInfo) public claimInfo;
+    mapping(address => address) public originalClaimer;
 
     /**********
      * Events *
@@ -58,16 +63,17 @@ contract SOAS is ERC20 {
     event Mint(address indexed to, uint256 amount, uint256 since, uint256 until);
     event Claim(address indexed holder, uint256 amount);
     event Renounce(address indexed holder, uint256 amount);
+    event Allow(address indexed original, address indexed transferable);
 
     /***************
      * Constructor *
      ***************/
 
     /**
-     * @param _staking Address of the Staking contract.
+     * @param _allowedAddresses List of the preallowed contract address.
      */
-    constructor(address _staking) ERC20("Stakable OAS", "SOAS") {
-        staking = _staking;
+    constructor(address[] memory _allowedAddresses) ERC20("Stakable OAS", "SOAS") {
+        allowedAddresses = _allowedAddresses;
     }
 
     /********************
@@ -85,15 +91,30 @@ contract SOAS is ERC20 {
         uint64 since,
         uint64 until
     ) external payable {
-        if (to == address(0) || to == staking) revert InvalidDestination();
-        if (claimInfo[to].amount != 0) revert AlreadyMinted();
+        if (to == address(0) || _contains(allowedAddresses, to)) revert InvalidDestination();
+        if (originalClaimer[to] != address(0)) revert AlreadyClaimer();
         if (since <= block.timestamp || since >= until) revert InvalidClaimPeriod();
         if (msg.value == 0) revert NoAmount();
 
         _mint(to, msg.value);
         claimInfo[to] = ClaimInfo(msg.value, 0, since, until, msg.sender);
+        originalClaimer[to] = to;
 
         emit Mint(to, msg.value, since, until);
+    }
+
+    /**
+     * Allow the transferable address for the claimer address. 
+     * @param original Address of the claimer.
+     * @param allowed Transferable address.
+     */
+    function allow(address original, address allowed) external {
+        if (claimInfo[original].from != msg.sender) revert InvalidMinter();
+        if (originalClaimer[allowed] != address(0)) revert AlreadyClaimer();
+
+        originalClaimer[allowed] = original;
+
+        emit Allow(original, allowed);
     }
 
     /**
@@ -103,16 +124,18 @@ contract SOAS is ERC20 {
     function claim(uint256 amount) external {
         if (amount == 0) revert NoAmount();
 
-        uint256 currentClaimableOAS = getClaimableOAS(msg.sender) - claimInfo[msg.sender].claimed;
+        ClaimInfo storage originalClaimInfo = claimInfo[originalClaimer[msg.sender]];
+        uint256 currentClaimableOAS = getClaimableOAS(originalClaimer[msg.sender]) -
+            originalClaimInfo.claimed;
         if (amount > currentClaimableOAS) revert OverAmount();
 
-        claimInfo[msg.sender].claimed += amount;
+        originalClaimInfo.claimed += amount;
 
         _burn(msg.sender, amount);
         (bool success, ) = msg.sender.call{ value: amount }("");
         if (!success) revert TransferFailed();
 
-        emit Claim(msg.sender, amount);
+        emit Claim(originalClaimer[msg.sender], amount);
     }
 
     /**
@@ -122,39 +145,32 @@ contract SOAS is ERC20 {
     function renounce(uint256 amount) external {
         if (amount == 0) revert NoAmount();
 
-        ClaimInfo memory info = claimInfo[msg.sender];
-        if (amount > info.amount - info.claimed) revert OverAmount();
+        ClaimInfo storage originalClaimInfo = claimInfo[originalClaimer[msg.sender]];
+        if (amount > originalClaimInfo.amount - originalClaimInfo.claimed) revert OverAmount();
 
         _burn(msg.sender, amount);
-        (bool success, ) = info.from.call{ value: amount }("");
+        (bool success, ) = originalClaimInfo.from.call{ value: amount }("");
         if (!success) revert TransferFailed();
 
-        emit Renounce(msg.sender, amount);
-    }
-
-    /**
-     * Get the Claim Info.
-     * @param holder Holder of the SOAS token.
-     */
-    function getClaimInfo(address holder) external view returns (ClaimInfo memory) {
-        return claimInfo[holder];
+        emit Renounce(originalClaimer[msg.sender], amount);
     }
 
     /**
      * Get current amount of the SOAS available for conversion.
-     * @param holder Holder of the SOAS token.
+     * @param original Holder of the SOAS token.
      */
-    function getClaimableOAS(address holder) public view returns (uint256) {
-        ClaimInfo memory info = claimInfo[holder];
-        if (info.amount == 0) {
+    function getClaimableOAS(address original) public view returns (uint256) {
+        ClaimInfo memory originalClaimInfo = claimInfo[original];
+        if (originalClaimInfo.amount == 0) {
             return 0;
         }
-        if (block.timestamp < info.since) {
+        if (block.timestamp < originalClaimInfo.since) {
             return 0;
         }
-        uint256 amount = (info.amount * (block.timestamp - info.since)) / (info.until - info.since);
-        if (amount > info.amount) {
-            return info.amount;
+        uint256 amount = (originalClaimInfo.amount * (block.timestamp - originalClaimInfo.since)) /
+            (originalClaimInfo.until - originalClaimInfo.since);
+        if (amount > originalClaimInfo.amount) {
+            return originalClaimInfo.amount;
         }
         return amount;
     }
@@ -171,8 +187,22 @@ contract SOAS is ERC20 {
         address to,
         uint256 amount
     ) internal view override {
-        if (!(from == address(0) || to == address(0) || from == staking || to == staking)) {
-            revert UnauthorizedTransfer();
+        if (from == address(0) || to == address(0)) return;
+        if (_contains(allowedAddresses, from) || _contains(allowedAddresses, to)) return;
+        if (originalClaimer[from] == originalClaimer[to]) return;
+
+        revert UnauthorizedTransfer();
+    }
+
+    /**
+     * Whether list of the address contains the item address.
+     */
+    function _contains(address[] memory list, address item) internal pure returns (bool) {
+        for (uint256 index = 0; index < list.length; index++) {
+            if (list[index] == item) {
+                return true;
+            }
         }
+        return false;
     }
 }
