@@ -12,6 +12,7 @@ interface EnvironmentValue {
   blockPeriod: number
   epochPeriod: number
   rewardRate: number
+  commissionRate: number
   validatorThreshold: string
   jailThreshold: number
   jailPeriod: number
@@ -58,10 +59,6 @@ class Validator {
 
   updateOperator(newOperator: string, sender?: Account) {
     return this._contract.connect(sender || this.owner).updateOperator(newOperator, { gasPrice })
-  }
-
-  updateCommissionRate(newRate: number, sender?: Account) {
-    return this._contract.connect(sender || this.owner).updateCommissionRate(newRate, { gasPrice })
   }
 
   activateValidator(epochs: number[], sender?: Account) {

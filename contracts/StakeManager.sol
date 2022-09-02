@@ -204,14 +204,6 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function updateCommissionRate(uint256 newRate) external validatorExists(msg.sender) {
-        validators[msg.sender].updateCommissionRate(environment, newRate);
-        emit ValidatorCommissionRateUpdated(msg.sender, newRate);
-    }
-
-    /**
-     * @inheritdoc IStakeManager
-     */
     function claimCommissions(address validator, uint256 epochs) external validatorExists(validator) {
         validators[validator].claimCommissions(environment, epochs);
     }
@@ -361,8 +353,7 @@ contract StakeManager is IStakeManager, System {
             bool active,
             bool jailed,
             bool candidate,
-            uint256 stakes,
-            uint256 commissionRate
+            uint256 stakes
         )
     {
         uint256 currentEpoch = environment.epoch();
@@ -374,9 +365,8 @@ contract StakeManager is IStakeManager, System {
         jailed = _validator.isJailed(epoch);
         stakes = _validator.getTotalStake(epoch);
         candidate = active && !jailed && stakes >= env.validatorThreshold;
-        commissionRate = _validator.getCommissionRate(epoch);
 
-        return (_validator.operator, active, jailed, candidate, stakes, commissionRate);
+        return (_validator.operator, active, jailed, candidate, stakes);
     }
 
     /**

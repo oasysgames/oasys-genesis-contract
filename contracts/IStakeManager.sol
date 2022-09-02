@@ -16,7 +16,6 @@ interface IStakeManager {
 
     event ValidatorActivated(address indexed validator, uint256[] epochs);
     event ValidatorDeactivated(address indexed validator, uint256[] epochs);
-    event ValidatorCommissionRateUpdated(address indexed validator, uint256 rate);
     event ValidatorSlashed(address indexed validator);
     event ValidatorJailed(address indexed validator, uint256 until);
     event Staked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
@@ -35,10 +34,6 @@ interface IStakeManager {
         mapping(uint256 => bool) inactives;
         // List of jailed epoch numbers.
         mapping(uint256 => bool) jails;
-        // Commission rate last updated epoch
-        uint256[] lastCommissionUpdates;
-        // Commission rates per epoch
-        uint256[] commissionRates;
         // Stake last updated epoch
         uint256[] stakeUpdates;
         // Stake amounts per epoch
@@ -118,13 +113,6 @@ interface IStakeManager {
      * @param epochs List of epoch numbers to inactive.
      */
     function deactivateValidator(address validator, uint256[] memory epochs) external;
-
-    /**
-     * Update validator commission rates.
-     * Changes will be applied from next epoch.
-     * @param newRate New commission rates(0%~100%).
-     */
-    function updateCommissionRate(uint256 newRate) external;
 
     /**
      * Withdraw validator commissions.
@@ -249,7 +237,6 @@ interface IStakeManager {
      * @return jailed Jailing status.
      * @return candidate Whether new blocks can be produced.
      * @return stakes Total staked amounts.
-     * @return commissionRate Commission rates.
      */
     function getValidatorInfo(address validator, uint256 epoch)
         external
@@ -259,8 +246,7 @@ interface IStakeManager {
             bool active,
             bool jailed,
             bool candidate,
-            uint256 stakes,
-            uint256 commissionRate
+            uint256 stakes
         );
 
     /**

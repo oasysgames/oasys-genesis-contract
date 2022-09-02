@@ -12,6 +12,7 @@ const initialValue: EnvironmentValue = {
   blockPeriod: 10,
   epochPeriod: 100,
   rewardRate: 10,
+  commissionRate: 0,
   validatorThreshold: toWei('500', 'ether'),
   jailThreshold: 50,
   jailPeriod: 2,
@@ -21,6 +22,7 @@ const expectValues = (actual: EnvironmentValue, expect_: EnvironmentValue) => {
   expect(actual.blockPeriod).to.equal(expect_.blockPeriod)
   expect(actual.epochPeriod).to.equal(expect_.epochPeriod)
   expect(actual.rewardRate).to.equal(expect_.rewardRate)
+  expect(actual.commissionRate).to.equal(expect_.commissionRate)
   expect(actual.validatorThreshold).to.equal(expect_.validatorThreshold)
   expect(actual.jailThreshold).to.equal(expect_.jailThreshold)
   expect(actual.jailPeriod).to.equal(expect_.jailPeriod)

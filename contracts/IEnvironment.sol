@@ -20,6 +20,8 @@ interface IEnvironment {
         uint256 epochPeriod;
         // Annual rate of staking reward
         uint256 rewardRate;
+        // Validator commission rate
+        uint256 commissionRate;
         // Amount of tokens required to become a validator
         uint256 validatorThreshold;
         // Number of not sealed to jailing the validator

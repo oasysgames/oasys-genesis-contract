@@ -22,6 +22,7 @@ const initialEnv: EnvironmentValue = {
   blockPeriod: 15,
   epochPeriod: 240,
   rewardRate: 10,
+  commissionRate: 0,
   validatorThreshold: toWei('500'),
   jailThreshold: 50,
   jailPeriod: 2,
@@ -383,31 +384,10 @@ describe('StakeManager', () => {
       await expect(tx).to.revertedWith('UnauthorizedSender()')
     })
 
-    it('updateCommissionRate()', async () => {
-      await allowAddress(validator)
-      await validator.joinValidator()
-      await staker1.stake(Token.OAS, validator, '1000')
-
-      // from owner
-      expect((await validator.getInfo()).commissionRate).to.equal(0)
-      await validator.updateCommissionRate(10, owner)
-      expect((await validator.getInfo()).commissionRate).to.equal(0)
-      await toNextEpoch()
-      expect((await validator.getInfo()).commissionRate).to.equal(10)
-
-      // from operator
-      let tx = validator.updateCommissionRate(10, operator)
-      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
-
-      // from attacker
-      tx = validator.updateCommissionRate(10, attacker)
-      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
-    })
-
     it('claimCommissions()', async () => {
       await allowAddress(validator)
       await validator.joinValidator()
-      await validator.updateCommissionRate(50)
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 50 })
 
       await staker1.stake(Token.OAS, validator, '500')
       await staker1.stake(Token.wOAS, validator, '250')
@@ -872,10 +852,7 @@ describe('StakeManager', () => {
   describe('rewards and commissions', () => {
     beforeEach(async () => {
       await initialize()
-      await updateEnvironment({
-        startEpoch: await getEpoch(1),
-        jailThreshold: 120,
-      })
+      await updateEnvironment({ startEpoch: await getEpoch(1), jailThreshold: 120 })
       await toNextEpoch()
     })
 
@@ -891,13 +868,13 @@ describe('StakeManager', () => {
       await validator1.claimCommissions()
 
       await toNextEpoch() // 1
-      await validator1.updateCommissionRate(10)
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
       await staker1.stake(Token.wOAS, validator1, '500')
       await staker2.stake(Token.sOAS, validator1, '500')
       await toNextEpoch() // 2
       await toNextEpoch() // 3
       await toNextEpoch() // 4
-      await validator1.updateCommissionRate(50)
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 50 })
       await staker1.stake(Token.wOAS, validator1, '250')
       await staker1.stake(Token.sOAS, validator1, '250')
       await staker2.stake(Token.wOAS, validator1, '250')
@@ -905,16 +882,16 @@ describe('StakeManager', () => {
       await toNextEpoch() // 5
       await toNextEpoch() // 6
       await toNextEpoch() // 7
-      await validator1.updateCommissionRate(100)
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 100 })
       await toNextEpoch() // 8
       await toNextEpoch() // 9
       await staker1.unstake(Token.OAS, validator1, '500')
       await staker1.unstake(Token.wOAS, validator1, '500')
       await staker2.unstake(Token.OAS, validator1, '500')
       await staker2.unstake(Token.sOAS, validator1, '500')
-      await validator1.updateCommissionRate(10)
-      await updateEnvironment({ startEpoch: startingEpoch + 12, rewardRate: 50 })
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
       await toNextEpoch() // 10
+      await updateEnvironment({ startEpoch: startingEpoch + 12, rewardRate: 50 })
 
       await staker1.expectRewards('0.01141552', validator1, 1)
       await staker2.expectRewards('0.02283105', validator1, 1)
@@ -1044,7 +1021,7 @@ describe('StakeManager', () => {
     it('when operating ratio is 50%', async () => {
       await staker1.stake(Token.OAS, validator1, '1000')
       await staker2.stake(Token.OAS, validator1, '2000')
-      await validator1.updateCommissionRate(10)
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
       await toNextEpoch()
 
       await staker1.claimRewards(validator1, 0)
@@ -1078,7 +1055,7 @@ describe('StakeManager', () => {
     it('when operating ratio is 0% and jailed', async () => {
       await staker1.stake(Token.OAS, validator1, '1000')
       await staker2.stake(Token.OAS, validator1, '2000')
-      await validator1.updateCommissionRate(10)
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
       await toNextEpoch()
 
       await staker1.claimRewards(validator1, 0)
@@ -1142,7 +1119,7 @@ describe('StakeManager', () => {
     it('when inactive', async () => {
       await staker1.stake(Token.OAS, validator1, '1000')
       await staker2.stake(Token.OAS, validator1, '2000')
-      await validator1.updateCommissionRate(10)
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
       await toNextEpoch()
 
       await staker1.claimRewards(validator1, 0)
@@ -1421,14 +1398,7 @@ describe('StakeManager', () => {
     })
 
     it('getValidatorInfo()', async () => {
-      const checker = async (
-        active: boolean,
-        jailed: boolean,
-        candidate: boolean,
-        stakes: string,
-        commissionRate: string,
-        epoch?: number,
-      ) => {
+      const checker = async (active: boolean, jailed: boolean, candidate: boolean, stakes: string, epoch?: number) => {
         const acutal = await validator1.getInfo(epoch)
         if (!epoch) {
           expect(acutal.operator).to.equal(validator1.operator.address)
@@ -1437,217 +1407,207 @@ describe('StakeManager', () => {
         expect(acutal.jailed).to.equal(jailed)
         expect(acutal.candidate).to.equal(candidate)
         expect(fromWei(acutal.stakes.toString())).to.eql(stakes)
-        expect(acutal.commissionRate).to.equal(commissionRate)
       }
 
-      await checker(true, false, false, '0', '0') // epoch 1
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, false, '0', '0', 2)
-      await checker(true, false, false, '0', '0', 3)
+      await checker(true, false, false, '0') // epoch 1
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, false, '0', 2)
+      await checker(true, false, false, '0', 3)
 
-      await validator1.updateCommissionRate(10)
       await staker1.stake(Token.OAS, validator1, '500')
       await staker2.stake(Token.OAS, validator1, '250')
 
-      await checker(true, false, false, '0', '0') // epoch 1
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '10', 3)
+      await checker(true, false, false, '0') // epoch 1
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
 
       await toNextEpoch()
 
-      await checker(true, false, true, '750', '10') // epoch 2
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '10', 3)
-      await checker(true, false, true, '750', '10', 4)
-
-      await validator1.updateCommissionRate(20)
-
-      await checker(true, false, true, '750', '10') // epoch 2
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, true, '750', '20', 4)
+      await checker(true, false, true, '750') // epoch 2
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, true, '750', 4)
 
       await toNextEpoch()
 
-      await checker(true, false, true, '750', '20') // epoch 3
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, true, '750', '20', 4)
-      await checker(true, false, true, '750', '20', 5)
+      await checker(true, false, true, '750') // epoch 3
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, true, '750', 4)
+      await checker(true, false, true, '750', 5)
 
       await staker1.unstake(Token.OAS, validator1, '200')
       await staker2.unstake(Token.OAS, validator1, '100')
 
-      await checker(true, false, true, '750', '20') // epoch 3
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, false, '450', '20', 5)
+      await checker(true, false, true, '750') // epoch 3
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, false, '450', 5)
 
       await toNextEpoch()
 
-      await checker(true, false, false, '450', '20') // epoch 4
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, false, '450', '20', 5)
-      await checker(true, false, false, '450', '20', 6)
+      await checker(true, false, false, '450') // epoch 4
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, false, '450', 5)
+      await checker(true, false, false, '450', 6)
 
       await staker1.stake(Token.OAS, validator1, '50')
 
-      await checker(true, false, false, '450', '20') // epoch 4
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(true, false, true, '500', '20', 6)
+      await checker(true, false, false, '450') // epoch 4
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(true, false, true, '500', 6)
 
       await toNextEpoch()
 
-      await checker(true, false, true, '500', '20') // epoch 5
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(true, false, true, '500', '20', 6)
-      await checker(true, false, true, '500', '20', 7)
+      await checker(true, false, true, '500') // epoch 5
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(true, false, true, '500', 6)
+      await checker(true, false, true, '500', 7)
 
       // mark
       const epoch: number = await getEpoch(0)
       await validator1.deactivateValidator([epoch + 1, epoch + 2])
 
-      await checker(true, false, true, '500', '20') // epoch 5
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(false, false, false, '500', '20', 6)
-      await checker(false, false, false, '500', '20', 7)
+      await checker(true, false, true, '500') // epoch 5
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(false, false, false, '500', 6)
+      await checker(false, false, false, '500', 7)
 
       await toNextEpoch()
 
-      await checker(false, false, false, '500', '20') // epoch 6
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(false, false, false, '500', '20', 6)
-      await checker(false, false, false, '500', '20', 7)
-      await checker(true, false, true, '500', '20', 8)
+      await checker(false, false, false, '500') // epoch 6
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(false, false, false, '500', 6)
+      await checker(false, false, false, '500', 7)
+      await checker(true, false, true, '500', 8)
 
       await toNextEpoch()
 
-      await checker(false, false, false, '500', '20') // epoch 7
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(false, false, false, '500', '20', 6)
-      await checker(false, false, false, '500', '20', 7)
-      await checker(true, false, true, '500', '20', 8)
-      await checker(true, false, true, '500', '20', 9)
+      await checker(false, false, false, '500') // epoch 7
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(false, false, false, '500', 6)
+      await checker(false, false, false, '500', 7)
+      await checker(true, false, true, '500', 8)
+      await checker(true, false, true, '500', 9)
 
       await toNextEpoch()
 
-      await checker(true, false, true, '500', '20') // epoch 8
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(false, false, false, '500', '20', 6)
-      await checker(false, false, false, '500', '20', 7)
-      await checker(true, false, true, '500', '20', 8)
-      await checker(true, false, true, '500', '20', 9)
-      await checker(true, false, true, '500', '20', 10)
+      await checker(true, false, true, '500') // epoch 8
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(false, false, false, '500', 6)
+      await checker(false, false, false, '500', 7)
+      await checker(true, false, true, '500', 8)
+      await checker(true, false, true, '500', 9)
+      await checker(true, false, true, '500', 10)
 
       await slash(validator1, validator1, 50)
 
-      await checker(true, false, true, '500', '20') // epoch 8
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(false, false, false, '500', '20', 6)
-      await checker(false, false, false, '500', '20', 7)
-      await checker(true, false, true, '500', '20', 8)
-      await checker(true, true, false, '500', '20', 9)
-      await checker(true, true, false, '500', '20', 10)
-      await checker(true, false, true, '500', '20', 11)
+      await checker(true, false, true, '500') // epoch 8
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(false, false, false, '500', 6)
+      await checker(false, false, false, '500', 7)
+      await checker(true, false, true, '500', 8)
+      await checker(true, true, false, '500', 9)
+      await checker(true, true, false, '500', 10)
+      await checker(true, false, true, '500', 11)
 
       await toNextEpoch()
 
-      await checker(true, true, false, '500', '20') // epoch 9
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(false, false, false, '500', '20', 6)
-      await checker(false, false, false, '500', '20', 7)
-      await checker(true, false, true, '500', '20', 8)
-      await checker(true, true, false, '500', '20', 9)
-      await checker(true, true, false, '500', '20', 10)
-      await checker(true, false, true, '500', '20', 11)
+      await checker(true, true, false, '500') // epoch 9
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(false, false, false, '500', 6)
+      await checker(false, false, false, '500', 7)
+      await checker(true, false, true, '500', 8)
+      await checker(true, true, false, '500', 9)
+      await checker(true, true, false, '500', 10)
+      await checker(true, false, true, '500', 11)
 
       await toNextEpoch()
 
-      await checker(true, true, false, '500', '20') // epoch 10
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(false, false, false, '500', '20', 6)
-      await checker(false, false, false, '500', '20', 7)
-      await checker(true, false, true, '500', '20', 8)
-      await checker(true, true, false, '500', '20', 9)
-      await checker(true, true, false, '500', '20', 10)
-      await checker(true, false, true, '500', '20', 11)
+      await checker(true, true, false, '500') // epoch 10
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(false, false, false, '500', 6)
+      await checker(false, false, false, '500', 7)
+      await checker(true, false, true, '500', 8)
+      await checker(true, true, false, '500', 9)
+      await checker(true, true, false, '500', 10)
+      await checker(true, false, true, '500', 11)
 
       await toNextEpoch()
 
-      await checker(true, false, true, '500', '20') // epoch 11
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(false, false, false, '500', '20', 6)
-      await checker(false, false, false, '500', '20', 7)
-      await checker(true, false, true, '500', '20', 8)
-      await checker(true, true, false, '500', '20', 9)
-      await checker(true, true, false, '500', '20', 10)
-      await checker(true, false, true, '500', '20', 11)
-      await checker(true, false, true, '500', '20', 12)
+      await checker(true, false, true, '500') // epoch 11
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(false, false, false, '500', 6)
+      await checker(false, false, false, '500', 7)
+      await checker(true, false, true, '500', 8)
+      await checker(true, true, false, '500', 9)
+      await checker(true, true, false, '500', 10)
+      await checker(true, false, true, '500', 11)
+      await checker(true, false, true, '500', 12)
 
       await toNextEpoch()
 
-      await checker(true, false, true, '500', '20') // epoch 12
-      await checker(true, false, false, '0', '0', 1)
-      await checker(true, false, true, '750', '10', 2)
-      await checker(true, false, true, '750', '20', 3)
-      await checker(true, false, false, '450', '20', 4)
-      await checker(true, false, true, '500', '20', 5)
-      await checker(false, false, false, '500', '20', 6)
-      await checker(false, false, false, '500', '20', 7)
-      await checker(true, false, true, '500', '20', 8)
-      await checker(true, true, false, '500', '20', 9)
-      await checker(true, true, false, '500', '20', 10)
-      await checker(true, false, true, '500', '20', 11)
-      await checker(true, false, true, '500', '20', 12)
+      await checker(true, false, true, '500') // epoch 12
+      await checker(true, false, false, '0', 1)
+      await checker(true, false, true, '750', 2)
+      await checker(true, false, true, '750', 3)
+      await checker(true, false, false, '450', 4)
+      await checker(true, false, true, '500', 5)
+      await checker(false, false, false, '500', 6)
+      await checker(false, false, false, '500', 7)
+      await checker(true, false, true, '500', 8)
+      await checker(true, true, false, '500', 9)
+      await checker(true, true, false, '500', 10)
+      await checker(true, false, true, '500', 11)
+      await checker(true, false, true, '500', 12)
     })
 
     it('getUnstakes()', async () => {
