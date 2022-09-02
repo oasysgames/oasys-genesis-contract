@@ -204,12 +204,10 @@ library Validator {
             epochs = prevEpoch - lastClaim;
         }
 
-        (uint256[] memory envUpdates, IEnvironment.EnvironmentValue[] memory envValues) = environment.epochAndValues();
-
         for (uint256 i = 0; i < epochs; i++) {
             lastClaim += 1;
 
-            uint256 rewards = getRewards(validator, envUpdates.find(envValues, lastClaim), lastClaim);
+            uint256 rewards = getRewards(validator, environment.findValue(lastClaim), lastClaim);
             if (rewards == 0) continue;
 
             uint256 commissionRate = getCommissionRate(validator, lastClaim);

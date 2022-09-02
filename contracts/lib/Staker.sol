@@ -66,7 +66,7 @@ library Staker {
             _addUnstakeAmount(staker, environment, token, unstakes);
         }
         if (refunds > 0) {
-            Token.transfers(token, msg.sender, refunds);
+            Token.transfers(token, staker.signer, refunds);
         }
         return amount;
     }
@@ -80,7 +80,7 @@ library Staker {
         (uint256 rewards, uint256 lastClaim) = getRewards(staker, environment, validator, epochs);
         staker.lastClaimReward[validator.owner] = lastClaim;
         if (rewards > 0) {
-            Token.transfers(Token.Type.OAS, msg.sender, rewards);
+            Token.transfers(Token.Type.OAS, staker.signer, rewards);
         }
     }
 
@@ -94,36 +94,6 @@ library Staker {
      * View Functions *
      ******************/
 
-    function getStakes(
-        IStakeManager.Staker storage staker,
-        address[] storage _validators,
-        Token.Type token,
-        uint256 epoch
-    )
-        internal
-        view
-        returns (
-            uint256[] memory currents,
-            uint256[] memory stakes,
-            uint256[] memory unstakes
-        )
-    {
-        currents = new uint256[](_validators.length);
-        stakes = new uint256[](_validators.length);
-        unstakes = new uint256[](_validators.length);
-        uint256 length = _validators.length;
-        for (uint256 i = 0; i < length; i++) {
-            uint256 current = getStake(staker, _validators[i], token, epoch);
-            uint256 next = getStake(staker, _validators[i], token, epoch + 1);
-            currents[i] = current;
-            if (next > current) {
-                stakes[i] = next - current;
-            } else if (next < current) {
-                unstakes[i] = current - next;
-            }
-        }
-    }
-
     function getStake(
         IStakeManager.Staker storage staker,
         address validator,
@@ -131,18 +101,6 @@ library Staker {
         uint256 epoch
     ) internal view returns (uint256) {
         return staker.stakeUpdates[token][validator].find(staker.stakeAmounts[token][validator], epoch);
-    }
-
-    function getTotalStake(
-        IStakeManager.Staker storage staker,
-        address[] storage validators,
-        Token.Type token,
-        uint256 epoch
-    ) internal view returns (uint256 totalStake) {
-        uint256 length = validators.length;
-        for (uint256 i = 0; i < length; i++) {
-            totalStake += getStake(staker, validators[i], token, epoch);
-        }
     }
 
     function getRewards(
@@ -157,8 +115,6 @@ library Staker {
             epochs = prevEpoch - lastClaim;
         }
 
-        (uint256[] memory envUpdates, IEnvironment.EnvironmentValue[] memory envValues) = environment.epochAndValues();
-
         for (uint256 i = 0; i < epochs; i++) {
             lastClaim += 1;
 
@@ -168,7 +124,7 @@ library Staker {
             if (_stake == 0) continue;
 
             uint256 validatorRewards = validator.getRewardsWithoutCommissions(
-                envUpdates.find(envValues, lastClaim),
+                environment.findValue(lastClaim),
                 lastClaim
             );
             if (validatorRewards == 0) continue;
@@ -242,6 +198,6 @@ library Staker {
             staker.unstakeAmounts[token] = [staker.unstakeAmounts[token][length - 1]];
         }
 
-        Token.transfers(token, msg.sender, unstakes);
+        Token.transfers(token, staker.signer, unstakes);
     }
 }

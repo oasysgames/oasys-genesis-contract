@@ -82,9 +82,8 @@ interface IEnvironment {
     function nextValue() external view returns (EnvironmentValue memory);
 
     /**
-     * Returns list of the update history of environment values
-     * @return epochs List of epoch numbers to which the values apply.
-     * @return _values List of environment values.
+     * Returns the environment value for the specific epoch.
+     * @return Environment value.
      */
-    function epochAndValues() external view returns (uint256[] memory epochs, EnvironmentValue[] memory _values);
+    function findValue(uint256 _epoch) external view returns (EnvironmentValue memory);
 }

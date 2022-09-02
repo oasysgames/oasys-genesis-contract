@@ -21,6 +21,7 @@ interface ValidatorInfo {
   operator?: string
   active: boolean
   jailed: boolean
+  candidate: boolean
   stakes: BigNumber
   commissionRate: BigNumber
 }
@@ -76,29 +77,32 @@ class Validator {
   }
 
   async getInfo(epoch?: number): Promise<ValidatorInfo> {
-    if (epoch) {
-      return await this._contract.functions['getValidatorInfo(address,uint256)'](this.owner.address, epoch)
-    } else {
-      return await this._contract.functions['getValidatorInfo(address)'](this.owner.address)
-    }
+    return await this._contract.functions['getValidatorInfo(address,uint256)'](this.owner.address, epoch ?? 0)
   }
 
   async slash(validator: Validator, blocks: number) {
     return await this._contract.connect(this.operator).slash(validator.operator.address, blocks, { gasPrice })
   }
 
-  async expectStakes(epoch: number, expectStakers: Staker[], expectEthers: string[], page = 1, perPage = 50) {
-    const { _stakers, stakes } = await this._contract.getValidatorStakes(this.owner.address, epoch, page, perPage)
-
+  async expectStakes(
+    epoch: number,
+    expectStakers: Staker[],
+    expectEthers: string[],
+    cursor = 0,
+    howMany = 100,
+    expectNewCursor?: number,
+  ) {
+    const { _stakers, stakes, newCursor } = await this._contract.getValidatorStakes(
+      this.owner.address,
+      epoch,
+      cursor,
+      howMany,
+    )
     let _expectStakers = expectStakers.map((x) => x.address)
-    if (expectStakers.length < perPage) {
-      const range = Array.from(Array(perPage - expectStakers.length).keys())
-      _expectStakers = [..._expectStakers, ...range.map((_) => zeroAddress)]
-      expectEthers = [...expectEthers, ...range.map((x) => '0')]
-    }
 
     expect(_stakers).to.eql(_expectStakers)
     expect(stakes).to.eql(expectEthers.map((x) => toBNWei(x)))
+    expect(newCursor).to.equal(expectNewCursor ?? _stakers.length)
   }
 
   async expectCommissions(expectEther: string, epochs?: number) {
@@ -142,12 +146,26 @@ class Staker {
     return this.contract.unstake(validator.owner.address, token, toWei(amount), { gasPrice })
   }
 
-  claimRewards(validator: Validator, epochs: number) {
-    return this.contract.claimRewards(validator.owner.address, epochs, { gasPrice })
+  claimRewards(validator: Validator, epochs: number, sender?: Account) {
+    return this._contract
+      .connect(sender ?? this.signer)
+      .claimRewards(this.address, validator.owner.address, epochs, { gasPrice })
   }
 
-  claimUnstakes() {
-    return this.contract.claimUnstakes({ gasPrice })
+  claimUnstakes(sender?: Account) {
+    return this._contract.connect(sender ?? this.signer).claimUnstakes(this.address, { gasPrice })
+  }
+
+  async getStakes(
+    epoch?: number,
+    cursor = 0,
+    howMany = 100,
+  ): Promise<{ oasStakes: BigNumber[]; woasStakes: BigNumber[]; soasStakes: BigNumber[]; newCursor: BigNumber }> {
+    return await this._contract.getStakerStakes(this.signer.address, epoch ?? 0, cursor, howMany)
+  }
+
+  async getUnstakes(): Promise<{ oasUnstakes: BigNumber; woasUnstakes: BigNumber; soasUnstakes: BigNumber }> {
+    return await this._contract.getUnstakes(this.signer.address)
   }
 
   async expectRewards(expectEther: string, validator: Validator, epochs?: number) {
@@ -156,45 +174,36 @@ class Staker {
   }
 
   async expectTotalStake(expectOAS: string, expectWOAS: string, expectSOAS: string) {
-    let stakes: BigNumber
-    ;({ stakes } = await this.getInfo(0))
-    expect(stakes).to.equal(toBNWei(expectOAS))
-    ;({ stakes } = await this.getInfo(1))
-    expect(stakes).to.equal(toBNWei(expectWOAS))
-    ;({ stakes } = await this.getInfo(2))
-    expect(stakes).to.equal(toBNWei(expectSOAS))
+    const sum = (arr: BigNumber[]): BigNumber => {
+      return arr.reduce((sum, element) => sum.add(element), BigNumber.from(0))
+    }
+
+    const { oasStakes, woasStakes, soasStakes } = await this.getStakes()
+    expect(sum(oasStakes)).to.equal(toBNWei(expectOAS))
+    expect(sum(woasStakes)).to.equal(toBNWei(expectWOAS))
+    expect(sum(soasStakes)).to.equal(toBNWei(expectSOAS))
   }
 
   async expectStakes(
     epoch: number,
     expectValidators: Validator[],
     expectStakes: string[][],
-    expectStakeRequests?: string[][],
-    expectUnstakeRequests?: string[][],
+    cursor = 0,
+    howMany = 100,
+    expectNewCursor?: number,
   ) {
-    const checker = async (token: number) => {
-      const { _validators, stakes, stakeRequests, unstakeRequests } = await this.contract.getStakerStakes(
-        this.address,
-        token,
-        epoch,
-      )
+    const { _validators, oasStakes, woasStakes, soasStakes, newCursor } = await this.contract.getStakerStakes(
+      this.address,
+      epoch,
+      cursor,
+      howMany,
+    )
 
-      expect(_validators).to.eql(expectValidators.map((x) => x.owner.address))
-      expect(stakes).to.eql(expectStakes[token].map((x) => toBNWei(x)))
-      if (expectStakeRequests) {
-        expect(stakeRequests).to.eql(expectStakeRequests[token].map((x) => toBNWei(x)))
-      }
-      if (expectUnstakeRequests) {
-        expect(unstakeRequests).to.eql(expectUnstakeRequests[token].map((x) => toBNWei(x)))
-      }
-    }
-    await checker(0)
-    await checker(1)
-    await checker(2)
-  }
-
-  async getInfo(token: number): Promise<StakerInfo> {
-    return await this.contract.getStakerInfo(this.signer.address, token)
+    expect(_validators).to.eql(expectValidators.map((x) => x.owner.address))
+    expect(oasStakes).to.eql(expectStakes[0].map((x) => toBNWei(x)))
+    expect(woasStakes).to.eql(expectStakes[1].map((x) => toBNWei(x)))
+    expect(soasStakes).to.eql(expectStakes[2].map((x) => toBNWei(x)))
+    expect(newCursor).to.equal(expectNewCursor ?? _validators.length)
   }
 }
 

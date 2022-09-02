@@ -167,18 +167,24 @@ interface IStakeManager {
     ) external;
 
     /**
+     * Withdraw unstaked tokens whose lock period has expired.
+     * @param staker Staker address.
+     */
+    function claimUnstakes(address staker) external;
+
+    /**
      * Withdraw staking rewards.
+     * @param staker Staker address.
      * @param validator Validator address.
      * @param epochs Number of epochs to be withdrawn.
      *     If zero is specified, all rewards from the last withdrawal to the present will be withdrawn.
      *     If the gas limit is reached, specify a smaller value.
      */
-    function claimRewards(address validator, uint256 epochs) external;
-
-    /**
-     * Withdraw unstaked tokens whose lock period has expired.
-     */
-    function claimUnstakes() external;
+    function claimRewards(
+        address staker,
+        address validator,
+        uint256 epochs
+    ) external;
 
     /******************
      * View Functions *
@@ -186,74 +192,62 @@ interface IStakeManager {
 
     /**
      * Returns validators who create blocks in the current epoch.
-     * @return owners List of addresses for block signing.
-     * @return operators List of validator owner addresses.
+     * @param epoch Target epoch number.
+     * @param cursor The index of the first item being requested.
+     * @param howMany Indicates how many items should be returned.
+     * @return owners List of validator owner addresses.
+     * @return operators List of addresses for block signing.
      * @return stakes List of total staked amounts for each validator.
+     * @return candidates List of whether new blocks can be produced.
+     * @return newCursor Cursor that should be used in the next request.
      */
-    function getCurrentValidators()
+    function getValidators(
+        uint256 epoch,
+        uint256 cursor,
+        uint256 howMany
+    )
         external
         view
         returns (
             address[] memory owners,
             address[] memory operators,
-            uint256[] memory stakes
+            uint256[] memory stakes,
+            bool[] memory candidates,
+            uint256 newCursor
         );
 
     /**
-     * Returns validators who create blocks in the next epoch.
-     * @return owners List of addresses for block signing.
-     * @return operators List of validator owner addresses.
-     * @return stakes List of total staked amounts for each validator.
+     * Returns validator owner addresses with pagination.
+     * @param cursor The index of the first item being requested.
+     * @param howMany Indicates how many items should be returned.
+     * @return owners List of validator owner addresses.
+     * @return newCursor Cursor that should be used in the next request.
      */
-    function getNextValidators()
+    function getValidatorOwners(uint256 cursor, uint256 howMany)
         external
         view
-        returns (
-            address[] memory owners,
-            address[] memory operators,
-            uint256[] memory stakes
-        );
-
-    /**
-     * Returns addresses of all validators.
-     * @return List of validator address.
-     */
-    function getValidators() external view returns (address[] memory);
+        returns (address[] memory owners, uint256 newCursor);
 
     /**
      * Returns staker addresses with pagination.
-     * @param page Number of page.
-     * @param perPage Number of addresses per page.
-     * @return List of staker address.
+     * @param cursor The index of the first item being requested.
+     * @param howMany Indicates how many items should be returned.
+     * @return stakers List of staker addresses.
+     * @return newCursor Cursor that should be used in the next request.
      */
-    function getStakers(uint256 page, uint256 perPage) external view returns (address[] memory);
-
-    /**
-     * Returns validator information.
-     * @param validator Validator address.
-     * @return operator Address used for block signing
-     * @return active Validator status.
-     * @return jailed Jailing status.
-     * @return stakes Total staked amounts.
-     * @return commissionRate Commission rates.
-     */
-    function getValidatorInfo(address validator)
+    function getStakers(uint256 cursor, uint256 howMany)
         external
         view
-        returns (
-            address operator,
-            bool active,
-            bool jailed,
-            uint256 stakes,
-            uint256 commissionRate
-        );
+        returns (address[] memory stakers, uint256 newCursor);
 
     /**
      * Returns the validator information for the specified epoch.
      * @param validator Validator address.
      * @param epoch Target epoch number.
+     * @return operator Address used for block signing
      * @return active Validator status.
      * @return jailed Jailing status.
+     * @return candidate Whether new blocks can be produced.
      * @return stakes Total staked amounts.
      * @return commissionRate Commission rates.
      */
@@ -261,20 +255,13 @@ interface IStakeManager {
         external
         view
         returns (
+            address operator,
             bool active,
             bool jailed,
+            bool candidate,
             uint256 stakes,
             uint256 commissionRate
         );
-
-    /**
-     * Returns staker information.
-     * @param staker Staker address.
-     * @param token Type of token.
-     * @return stakes Total staked amounts.
-     * @return unstakes Total unstaked amounts.
-     */
-    function getStakerInfo(address staker, Token.Type token) external view returns (uint256 stakes, uint256 unstakes);
 
     /**
      * Returns the balance of validator commissions.
@@ -285,6 +272,22 @@ interface IStakeManager {
      * @return commissions Commission balance.
      */
     function getCommissions(address validator, uint256 epochs) external view returns (uint256 commissions);
+
+    /**
+     * Returns total unstaked amounts.
+     * @param staker Staker address.
+     * @return oasUnstakes Amount of unstaked OAS.
+     * @return woasUnstakes Amount of unstaked wOAS.
+     * @return soasUnstakes Amount of unstaked sOAS.
+     */
+    function getUnstakes(address staker)
+        external
+        view
+        returns (
+            uint256 oasUnstakes,
+            uint256 woasUnstakes,
+            uint256 soasUnstakes
+        );
 
     /**
      * Returns the balance of staking rewards.
@@ -302,50 +305,63 @@ interface IStakeManager {
     ) external view returns (uint256 rewards);
 
     /**
-     * Returns the total staking rewards for a given epoch period.
+     * Returns the total staking reward from addresses and epoch period.
+     * @param validators List of validator owner addresses.
      * @param epochs Number of epochs to be calculated.
      * @return rewards Total staking rewards.
      */
-    function getTotalRewards(uint256 epochs) external view returns (uint256 rewards);
+    function getTotalRewards(address[] memory validators, uint256 epochs) external view returns (uint256 rewards);
 
     /**
      * Returns a list of stakers and amounts to the validator.
      * @param validator Validator address.
      * @param epoch Target epoch number.
-     * @param page Number of page.
-     * @param perPage Number of addresses per page.
-     * @return _stakers List of staker address.
+     * @param cursor The index of the first item being requested.
+     * @param howMany Indicates how many items should be returned.
+     * @return stakers List of staker address.
      * @return stakes List of staked amounts for each staker.
+     * @return newCursor Cursor that should be used in the next request.
      */
     function getValidatorStakes(
         address validator,
         uint256 epoch,
-        uint256 page,
-        uint256 perPage
-    ) external view returns (address[] memory _stakers, uint256[] memory stakes);
-
-    /**
-     * Returns a list of staking from Staker to a validator.
-     * @param staker Staker address.
-     * @param token Type of token.
-     * @param epoch Target epoch number.
-     * @return _validators List of validator address.
-     * @return stakes List of staked amounts for each staker.
-     * @return stakeRequests List of stake amounts to be added in the next epoch.
-     * @return unstakeRequests List of stake amounts to be reduced in the next epoch.
-     */
-    function getStakerStakes(
-        address staker,
-        Token.Type token,
-        uint256 epoch
+        uint256 cursor,
+        uint256 howMany
     )
         external
         view
         returns (
-            address[] memory _validators,
+            address[] memory stakers,
             uint256[] memory stakes,
-            uint256[] memory stakeRequests,
-            uint256[] memory unstakeRequests
+            uint256 newCursor
+        );
+
+    /**
+     * Returns a list of staking from Staker to a validator.
+     * @param staker Staker address.
+     * @param epoch Target epoch number.
+     * @param cursor The index of the first item being requested.
+     * @param howMany Indicates how many items should be returned.
+     * @return validators List of validator address.
+     * @return oasStakes List of OAS amounts for each validator.
+     * @return woasStakes List of wOAS amounts for each validator.
+     * @return soasStakes List of sOAS amounts for each validator.
+     * @return newCursor Cursor that should be used in the next request.
+     */
+    function getStakerStakes(
+        address staker,
+        uint256 epoch,
+        uint256 cursor,
+        uint256 howMany
+    )
+        external
+        view
+        returns (
+            address[] memory validators,
+            uint256[] memory oasStakes,
+            uint256[] memory woasStakes,
+            uint256[] memory soasStakes,
+            uint256 newCursor
         );
 
     /**

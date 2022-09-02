@@ -56,21 +56,39 @@ describe('StakeManager', () => {
 
   let currentBlock = 0
 
-  const expectCurrentValidators = async (expectValidators: Validator[], expectStakes?: string[]) => {
-    _expectValidators(await stakeManager.getCurrentValidators(), expectValidators, expectStakes)
+  const expectCurrentValidators = async (
+    expValidators: Validator[],
+    expCandidates: boolean[],
+    expStakes?: string[],
+  ) => {
+    await expectValidators(await getEpoch(0), expValidators, expCandidates, expStakes)
   }
 
-  const expectNextValidators = async (expectValidators: Validator[], expectStakes?: string[]) => {
-    _expectValidators(await stakeManager.getNextValidators(), expectValidators, expectStakes)
+  const expectNextValidators = async (expValidators: Validator[], expCandidates: boolean[], expStakes?: string[]) => {
+    await expectValidators(await getEpoch(1), expValidators, expCandidates, expStakes)
   }
 
-  const _expectValidators = (values: any, expectValidators: Validator[], expectStakes?: string[]) => {
-    const { owners, operators, stakes } = values
-    expect(owners).to.eql(expectValidators.map((x) => x.owner.address))
-    expect(operators).to.eql(expectValidators.map((x) => x.operator.address))
-    if (expectStakes) {
-      expect(stakes.map((x: any) => fromWei(x.toString()))).to.eql(expectStakes)
+  const expectValidators = async (
+    epoch: number,
+    expValidators: Validator[],
+    expCandidates: boolean[],
+    expStakes?: string[],
+    cursor = 0,
+    howMany = 100,
+    expNewCursor?: number,
+  ) => {
+    const { owners, operators, stakes, candidates, newCursor } = await stakeManager.getValidators(
+      epoch,
+      cursor,
+      howMany,
+    )
+    expect(owners).to.eql(expValidators.map((x) => x.owner.address))
+    expect(operators).to.eql(expValidators.map((x) => x.operator.address))
+    expect(candidates).to.eql(expCandidates)
+    if (expStakes) {
+      expect(stakes.map((x: any) => fromWei(x.toString()))).to.eql(expStakes)
     }
+    expect(newCursor).to.equal(expNewCursor ?? owners.length)
   }
 
   const expectBalance = async (
@@ -112,6 +130,10 @@ describe('StakeManager', () => {
     await mining(currentBlock)
   }
 
+  const getEpoch = async (incr: number) => {
+    return (await environment.epoch()).toNumber() + incr
+  }
+
   const setCoinbase = async (address: string) => {
     const current = await network.provider.send('eth_coinbase')
     await network.provider.send('hardhat_setCoinbase', [address])
@@ -128,8 +150,8 @@ describe('StakeManager', () => {
 
   const slash = async (validator: Validator, target: Validator, count: number) => {
     const env = await environment.value()
-    const { operators } = await stakeManager.getCurrentValidators()
-    const blocks = ~~(env.epochPeriod / operators.length)
+    const { operators, candidates } = await stakeManager.getValidators(await getEpoch(0), 0, 100)
+    const blocks = ~~(env.epochPeriod / operators.filter((_: any, i: number) => candidates[i]).length)
 
     const restoreCoinbase = await setCoinbase(validator.operator.address)
     await Promise.all([...Array(count).keys()].map((_) => validator.slash(target, blocks)))
@@ -251,97 +273,106 @@ describe('StakeManager', () => {
     })
 
     it('deactivateValidator() and activateValidator()', async () => {
-      const getEpoch = async (incr: number) => (await environment.epoch()).toNumber() + incr
-
       await allowAddress(validator)
       await validator.joinValidator()
       await staker1.stake(Token.OAS, validator, '500')
 
-      await expectCurrentValidators([], [])
-      await expectNextValidators([validator], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [false], ['0'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator], ['500'])
-      await expectNextValidators([validator], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
       expect((await validator.getInfo()).active).to.be.true
 
       // from owner
-      let nextEpoch = await getEpoch(1)
-      await validator.deactivateValidator([nextEpoch], owner)
+      await validator.deactivateValidator([await getEpoch(1)], owner)
 
-      await expectCurrentValidators([validator], ['500'])
-      await expectNextValidators([], [])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [false], ['500'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectCurrentValidators([], [])
-      await expectNextValidators([validator], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
       expect((await validator.getInfo()).active).to.be.false
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator], ['500'])
-      await expectNextValidators([validator], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
       expect((await validator.getInfo()).active).to.be.true
 
-      nextEpoch = await getEpoch(1)
-      await validator.deactivateValidator([nextEpoch + 1, nextEpoch + 2, nextEpoch + 3], owner)
-      await validator.activateValidator([nextEpoch + 2])
+      await validator.deactivateValidator([await getEpoch(2), await getEpoch(3), await getEpoch(5)], owner)
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(2), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(3), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(4), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(5), [validator], [false], ['500'])
+      expect((await validator.getInfo()).active).to.be.true
 
-      await expectCurrentValidators([validator], ['500'])
-      await expectNextValidators([validator], ['500'])
+      await validator.activateValidator([await getEpoch(3)])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(2), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(3), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(4), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(5), [validator], [false], ['500'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator], ['500'])
-      await expectNextValidators([], [])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [false], ['500'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectCurrentValidators([], [])
-      await expectNextValidators([validator], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
       expect((await validator.getInfo()).active).to.be.false
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator], ['500'])
-      await expectNextValidators([], [])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectCurrentValidators([], [])
-      await expectNextValidators([validator], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [false], ['500'])
+      expect((await validator.getInfo()).active).to.be.true
+
+      await toNextEpoch()
+
+      await expectValidators(await getEpoch(0), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
       expect((await validator.getInfo()).active).to.be.false
 
       await toNextEpoch()
-
-      await expectCurrentValidators([validator], ['500'])
-      await expectNextValidators([validator], ['500'])
-      expect((await validator.getInfo()).active).to.be.true
 
       // from operator
       await validator.deactivateValidator([await getEpoch(1)], operator)
 
-      await expectCurrentValidators([validator], ['500'])
-      await expectNextValidators([], [])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [false], ['500'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectCurrentValidators([], [])
-      await expectNextValidators([validator], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
       expect((await validator.getInfo()).active).to.be.false
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator], ['500'])
-      await expectNextValidators([validator], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
       expect((await validator.getInfo()).active).to.be.true
 
       // from attacker
@@ -401,9 +432,13 @@ describe('StakeManager', () => {
       await expectBalance(stakeManager, '499.982876712328767125', '250', '250')
       await expectBalance(validator.owner, '10000.017123287671232875', '0', '0')
 
-      // from attacker
-      const tx = validator.claimCommissions(attacker)
-      await expect(tx).to.revertedWith('UnauthorizedSender()')
+      await toNextEpoch()
+      await toNextEpoch()
+
+      // from outsider
+      await validator.claimCommissions(attacker)
+      await expectBalance(stakeManager, '499.971461187214611875', '250', '250')
+      await expectBalance(validator.owner, '10000.028538812785388125', '0', '0')
     })
   })
 
@@ -781,6 +816,56 @@ describe('StakeManager', () => {
           ['0', '5', '0', '0', '0'],
         ],
       )
+
+      await staker1.unstake(Token.OAS, validator2, '5')
+
+      await expectBalance(stakeManager, '505', '5', '5')
+      await expectBalance(staker1.signer, '7995', '995', '995')
+      await expectBalance(staker2.signer, '8000', '1000', '1000')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '5', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+        ],
+      )
+      await staker2.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
+
+      // claim from outsider
+      await toNextEpoch()
+      await staker1.claimUnstakes(staker2.signer)
+
+      await expectBalance(stakeManager, '500', '5', '5')
+      await expectBalance(staker1.signer, '8000', '995', '995')
+      await expectBalance(staker2.signer, '8000', '1000', '1000')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+        ],
+      )
+      await staker2.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
     })
   })
 
@@ -788,14 +873,14 @@ describe('StakeManager', () => {
     beforeEach(async () => {
       await initialize()
       await updateEnvironment({
-        startEpoch: (await environment.epoch()).toNumber() + 1,
+        startEpoch: await getEpoch(1),
         jailThreshold: 120,
       })
       await toNextEpoch()
     })
 
     it('when operating ratio is 100%', async () => {
-      const startingEpoch = (await environment.epoch()).toNumber()
+      const startingEpoch = await getEpoch(0)
 
       await staker1.stake(Token.OAS, validator1, '1000')
       await staker2.stake(Token.OAS, validator1, '2000')
@@ -947,6 +1032,13 @@ describe('StakeManager', () => {
 
       // check for double claim
       await check2()
+
+      await toNextEpoch()
+
+      // claim from outsider
+      await staker1.claimRewards(validator1, 0, staker2.signer)
+      await expectBalance(staker1.signer, '7000.26769406', '250', '750')
+      await expectBalance(staker2.signer, '6000.40011415', '750', '250')
     })
 
     it('when operating ratio is 50%', async () => {
@@ -1057,7 +1149,7 @@ describe('StakeManager', () => {
       await staker2.claimRewards(validator1, 0)
       await validator1.claimCommissions()
 
-      const epoch = (await environment.epoch()).toNumber()
+      const epoch = await getEpoch(0)
       await validator1.deactivateValidator([
         epoch + 1,
         epoch + 2,
@@ -1129,7 +1221,7 @@ describe('StakeManager', () => {
     })
 
     it('slash()', async () => {
-      const startingEpoch = (await environment.epoch()).toNumber()
+      const startingEpoch = await getEpoch(0)
       await updateEnvironment({
         startEpoch: startingEpoch + 1,
         jailThreshold: 50,
@@ -1140,43 +1232,43 @@ describe('StakeManager', () => {
       await staker1.stake(Token.OAS, validator2, '500')
       await staker1.stake(Token.OAS, validator3, '500')
 
-      await expectCurrentValidators([fixedValidator])
-      await expectNextValidators([validator1, validator2, validator3, fixedValidator])
+      await expectCurrentValidators(validators, [false, false, false, false, true])
+      await expectNextValidators(validators, [true, true, true, false, true])
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator1, validator2, validator3, fixedValidator])
-      await expectNextValidators([validator1, validator2, validator3, fixedValidator])
+      await expectCurrentValidators(validators, [true, true, true, false, true])
+      await expectNextValidators(validators, [true, true, true, false, true])
 
       await slash(validator1, validator2, 49)
 
-      await expectCurrentValidators([validator1, validator2, validator3, fixedValidator])
-      await expectNextValidators([validator1, validator2, validator3, fixedValidator])
+      await expectCurrentValidators(validators, [true, true, true, false, true])
+      await expectNextValidators(validators, [true, true, true, false, true])
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator1, validator2, validator3, fixedValidator])
-      await expectNextValidators([validator1, validator2, validator3, fixedValidator])
+      await expectCurrentValidators(validators, [true, true, true, false, true])
+      await expectNextValidators(validators, [true, true, true, false, true])
 
       await slash(validator1, validator2, 50)
 
-      await expectCurrentValidators([validator1, validator2, validator3, fixedValidator])
-      await expectNextValidators([validator1, validator3, fixedValidator])
+      await expectCurrentValidators(validators, [true, true, true, false, true])
+      await expectNextValidators(validators, [true, false, true, false, true])
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator1, validator3, fixedValidator])
-      await expectNextValidators([validator1, validator3, fixedValidator])
+      await expectCurrentValidators(validators, [true, false, true, false, true])
+      await expectNextValidators(validators, [true, false, true, false, true])
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator1, validator3, fixedValidator])
-      await expectNextValidators([validator1, validator2, validator3, fixedValidator])
+      await expectCurrentValidators(validators, [true, false, true, false, true])
+      await expectNextValidators(validators, [true, true, true, false, true])
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator1, validator2, validator3, fixedValidator])
-      await expectNextValidators([validator1, validator2, validator3, fixedValidator])
+      await expectCurrentValidators(validators, [true, true, true, false, true])
+      await expectNextValidators(validators, [true, true, true, false, true])
     })
   })
 
@@ -1185,62 +1277,154 @@ describe('StakeManager', () => {
       await initialize()
     })
 
-    it('getCurrentValidators() and getNextValidators()', async () => {
-      await expectCurrentValidators([], [])
-      await expectNextValidators([fixedValidator], ['500'])
+    it('getValidators()', async () => {
+      await expectCurrentValidators(validators, [false, false, false, false, false], ['0', '0', '0', '0', '0'])
+      await expectNextValidators(validators, [false, false, false, false, true], ['0', '0', '0', '0', '500'])
 
       await staker1.stake(Token.OAS, validator1, '501')
       await staker1.stake(Token.OAS, validator2, '499')
       await staker1.stake(Token.OAS, validator3, '502')
 
-      await expectCurrentValidators([], [])
-      await expectNextValidators([validator1, validator3, fixedValidator], ['501', '502', '500'])
+      await expectCurrentValidators(validators, [false, false, false, false, false], ['0', '0', '0', '0', '0'])
+      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
 
       await toNextEpoch()
 
-      await expectCurrentValidators([validator1, validator3, fixedValidator], ['501', '502', '500'])
-      await expectNextValidators([validator1, validator3, fixedValidator], ['501', '502', '500'])
+      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+
+      await validator1.deactivateValidator([await getEpoch(1)])
+
+      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
+
+      await toNextEpoch()
+
+      await expectCurrentValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+
+      await toNextEpoch()
+
+      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+
+      await slash(validator1, validator1, 50)
+
+      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
+
+      await toNextEpoch()
+
+      await expectCurrentValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
+
+      await toNextEpoch()
+
+      await expectCurrentValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+
+      await toNextEpoch()
+
+      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+
+      // check pagination
+      // howMany = 2
+      await expectValidators(await getEpoch(0), [validator1, validator2], [true, false], ['501', '499'], 0, 2, 2)
+      await expectValidators(await getEpoch(0), [validator3, validator4], [true, false], ['502', '0'], 2, 2, 4)
+      await expectValidators(await getEpoch(0), [fixedValidator], [true], ['500'], 4, 2, 5)
+
+      // howMany = 4
+      await expectValidators(
+        await getEpoch(0),
+        [validator1, validator2, validator3, validator4],
+        [true, false, true, false],
+        ['501', '499', '502', '0'],
+        0,
+        4,
+        4,
+      )
+      await expectValidators(await getEpoch(0), [fixedValidator], [true], ['500'], 4, 2, 5)
+
+      // howMany = 10
+      await expectValidators(
+        await getEpoch(0),
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [true, false, true, false, true],
+        ['501', '499', '502', '0', '500'],
+        0,
+        10,
+        5,
+      )
     })
 
-    it('getValidators()', async () => {
-      const actuals = await stakeManager.getValidators()
-      expect(actuals).to.eql(validators.map((x) => x.owner.address))
+    it('getValidatorOwners()', async () => {
+      const _expect = (
+        result: { owners: string[]; newCursor: BigNumber },
+        expectOwners: Validator[],
+        expectNewCursor: number,
+      ) => {
+        expect(result.owners).to.eql(expectOwners.map((x) => x.owner.address))
+        expect(result.newCursor).to.equal(expectNewCursor)
+      }
+
+      // howMany = 2
+      _expect(await stakeManager.getValidatorOwners(0, 2), [validator1, validator2], 2)
+      _expect(await stakeManager.getValidatorOwners(2, 2), [validator3, validator4], 4)
+      _expect(await stakeManager.getValidatorOwners(4, 2), [fixedValidator], 5)
+
+      // howMany = 3
+      _expect(await stakeManager.getValidatorOwners(0, 3), [validator1, validator2, validator3], 3)
+      _expect(await stakeManager.getValidatorOwners(3, 3), [validator4, fixedValidator], 5)
+
+      // howMany = 10
+      _expect(
+        await stakeManager.getValidatorOwners(0, 10),
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        5,
+      )
     })
 
     it('getStakers()', async () => {
-      const _expect = async (page: number, perPage: number, expectStakers: Staker[]) => {
-        page = page > 0 ? page : 1
-        perPage = perPage > 0 ? perPage : 50
-
-        const actuals = await stakeManager.getStakers(page, perPage)
-        expect(actuals.length).to.equal(perPage)
-
-        const _expectStakers = [...expectStakers.map((x) => x.address)]
-        if (page === 1) {
-          _expectStakers.unshift(fixedValidator.owner.address)
-        }
-
-        expect(actuals.slice(0, _expectStakers.length)).to.eql(_expectStakers)
-        expect(actuals.slice(_expectStakers.length, perPage)).to.eql(
-          [...Array(perPage - _expectStakers.length).keys()].map((_) => zeroAddress),
-        )
+      const _expect = (
+        result: { _stakers: string[]; newCursor: BigNumber },
+        expectStakers: Account[],
+        expectNewCursor: number,
+      ) => {
+        expect(result._stakers).to.eql(expectStakers.map((x) => x.address))
+        expect(result.newCursor).to.equal(expectNewCursor)
       }
 
       await staker1.stake(Token.OAS, validator1, '1')
-      await staker2.stake(Token.OAS, validator2, '2')
-      await staker3.stake(Token.OAS, validator3, '3')
-      await staker4.stake(Token.OAS, validator4, '4')
-      await toNextEpoch()
+      await staker2.stake(Token.OAS, validator1, '2')
+      await staker3.stake(Token.OAS, validator1, '3')
+      await staker4.stake(Token.OAS, validator1, '4')
+      await staker5.stake(Token.OAS, validator1, '5')
 
-      await _expect(0, 0, [staker1, staker2, staker3, staker4])
-      await _expect(1, 4, [staker1, staker2, staker3])
-      await _expect(2, 4, [staker4])
+      // howMany = 2
+      _expect(await stakeManager.getStakers(0, 2), [fixedValidator.owner, staker1.signer], 2)
+      _expect(await stakeManager.getStakers(2, 2), [staker2.signer, staker3.signer], 4)
+      _expect(await stakeManager.getStakers(4, 2), [staker4.signer, staker5.signer], 6)
+      _expect(await stakeManager.getStakers(6, 2), [], 6)
+
+      // howMany = 3
+      _expect(await stakeManager.getStakers(0, 3), [fixedValidator.owner, staker1.signer, staker2.signer], 3)
+      _expect(await stakeManager.getStakers(3, 3), [staker3.signer, staker4.signer, staker5.signer], 6)
+      _expect(await stakeManager.getStakers(6, 3), [], 6)
+
+      // howMany = 10
+      _expect(
+        await stakeManager.getStakers(0, 10),
+        [fixedValidator.owner, staker1.signer, staker2.signer, staker3.signer, staker4.signer, staker5.signer],
+        6,
+      )
     })
 
     it('getValidatorInfo()', async () => {
       const checker = async (
         active: boolean,
         jailed: boolean,
+        candidate: boolean,
         stakes: string,
         commissionRate: string,
         epoch?: number,
@@ -1251,171 +1435,255 @@ describe('StakeManager', () => {
         }
         expect(acutal.active).to.equal(active)
         expect(acutal.jailed).to.equal(jailed)
+        expect(acutal.candidate).to.equal(candidate)
         expect(fromWei(acutal.stakes.toString())).to.eql(stakes)
         expect(acutal.commissionRate).to.equal(commissionRate)
       }
 
-      await checker(true, false, '0', '0') // epoch 1
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '0', '0', 2)
-      await checker(true, false, '0', '0', 3)
+      await checker(true, false, false, '0', '0') // epoch 1
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, false, '0', '0', 2)
+      await checker(true, false, false, '0', '0', 3)
 
       await validator1.updateCommissionRate(10)
       await staker1.stake(Token.OAS, validator1, '500')
       await staker2.stake(Token.OAS, validator1, '250')
 
-      await checker(true, false, '0', '0') // epoch 1
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '10', 3)
+      await checker(true, false, false, '0', '0') // epoch 1
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '10', 3)
 
       await toNextEpoch()
 
-      await checker(true, false, '750', '10') // epoch 2
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '10', 3)
-      await checker(true, false, '750', '10', 4)
+      await checker(true, false, true, '750', '10') // epoch 2
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '10', 3)
+      await checker(true, false, true, '750', '10', 4)
 
       await validator1.updateCommissionRate(20)
 
-      await checker(true, false, '750', '10') // epoch 2
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '750', '20', 4)
+      await checker(true, false, true, '750', '10') // epoch 2
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, true, '750', '20', 4)
 
       await toNextEpoch()
 
-      await checker(true, false, '750', '20') // epoch 3
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '750', '20', 4)
-      await checker(true, false, '750', '20', 5)
+      await checker(true, false, true, '750', '20') // epoch 3
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, true, '750', '20', 4)
+      await checker(true, false, true, '750', '20', 5)
 
       await staker1.unstake(Token.OAS, validator1, '200')
       await staker2.unstake(Token.OAS, validator1, '100')
 
-      await checker(true, false, '750', '20') // epoch 3
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '450', '20', 4)
-      await checker(true, false, '450', '20', 5)
+      await checker(true, false, true, '750', '20') // epoch 3
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, false, '450', '20', 5)
 
       await toNextEpoch()
 
-      await checker(true, false, '450', '20') // epoch 4
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '450', '20', 4)
-      await checker(true, false, '450', '20', 5)
-      await checker(true, false, '450', '20', 6)
+      await checker(true, false, false, '450', '20') // epoch 4
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, false, '450', '20', 5)
+      await checker(true, false, false, '450', '20', 6)
 
-      const epoch: number = (await environment.epoch()).toNumber()
+      await staker1.stake(Token.OAS, validator1, '50')
+
+      await checker(true, false, false, '450', '20') // epoch 4
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(true, false, true, '500', '20', 6)
+
+      await toNextEpoch()
+
+      await checker(true, false, true, '500', '20') // epoch 5
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(true, false, true, '500', '20', 6)
+      await checker(true, false, true, '500', '20', 7)
+
+      // mark
+      const epoch: number = await getEpoch(0)
       await validator1.deactivateValidator([epoch + 1, epoch + 2])
 
-      await checker(true, false, '450', '20') // epoch 4
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '450', '20', 4)
-      await checker(false, false, '450', '20', 5)
-      await checker(false, false, '450', '20', 6)
-      await checker(true, false, '450', '20', 7)
+      await checker(true, false, true, '500', '20') // epoch 5
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(false, false, false, '500', '20', 6)
+      await checker(false, false, false, '500', '20', 7)
 
       await toNextEpoch()
 
-      await checker(false, false, '450', '20') // epoch 5
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '450', '20', 4)
-      await checker(false, false, '450', '20', 5)
-      await checker(false, false, '450', '20', 6)
-      await checker(true, false, '450', '20', 7)
-      await checker(true, false, '450', '20', 8)
-      await checker(true, false, '450', '20', 9)
+      await checker(false, false, false, '500', '20') // epoch 6
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(false, false, false, '500', '20', 6)
+      await checker(false, false, false, '500', '20', 7)
+      await checker(true, false, true, '500', '20', 8)
+
+      await toNextEpoch()
+
+      await checker(false, false, false, '500', '20') // epoch 7
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(false, false, false, '500', '20', 6)
+      await checker(false, false, false, '500', '20', 7)
+      await checker(true, false, true, '500', '20', 8)
+      await checker(true, false, true, '500', '20', 9)
+
+      await toNextEpoch()
+
+      await checker(true, false, true, '500', '20') // epoch 8
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(false, false, false, '500', '20', 6)
+      await checker(false, false, false, '500', '20', 7)
+      await checker(true, false, true, '500', '20', 8)
+      await checker(true, false, true, '500', '20', 9)
+      await checker(true, false, true, '500', '20', 10)
 
       await slash(validator1, validator1, 50)
 
-      await checker(false, false, '450', '20') // epoch 5
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '450', '20', 4)
-      await checker(false, false, '450', '20', 5)
-      await checker(false, true, '450', '20', 6)
-      await checker(true, true, '450', '20', 7)
-      await checker(true, false, '450', '20', 8)
-      await checker(true, false, '450', '20', 9)
+      await checker(true, false, true, '500', '20') // epoch 8
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(false, false, false, '500', '20', 6)
+      await checker(false, false, false, '500', '20', 7)
+      await checker(true, false, true, '500', '20', 8)
+      await checker(true, true, false, '500', '20', 9)
+      await checker(true, true, false, '500', '20', 10)
+      await checker(true, false, true, '500', '20', 11)
 
       await toNextEpoch()
 
-      await checker(false, true, '450', '20') // epoch 6
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '450', '20', 4)
-      await checker(false, false, '450', '20', 5)
-      await checker(false, true, '450', '20', 6)
-      await checker(true, true, '450', '20', 7)
-      await checker(true, false, '450', '20', 8)
-      await checker(true, false, '450', '20', 9)
+      await checker(true, true, false, '500', '20') // epoch 9
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(false, false, false, '500', '20', 6)
+      await checker(false, false, false, '500', '20', 7)
+      await checker(true, false, true, '500', '20', 8)
+      await checker(true, true, false, '500', '20', 9)
+      await checker(true, true, false, '500', '20', 10)
+      await checker(true, false, true, '500', '20', 11)
 
       await toNextEpoch()
 
-      await checker(true, true, '450', '20') // epoch 7
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '450', '20', 4)
-      await checker(false, false, '450', '20', 5)
-      await checker(false, true, '450', '20', 6)
-      await checker(true, true, '450', '20', 7)
-      await checker(true, false, '450', '20', 8)
-      await checker(true, false, '450', '20', 9)
+      await checker(true, true, false, '500', '20') // epoch 10
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(false, false, false, '500', '20', 6)
+      await checker(false, false, false, '500', '20', 7)
+      await checker(true, false, true, '500', '20', 8)
+      await checker(true, true, false, '500', '20', 9)
+      await checker(true, true, false, '500', '20', 10)
+      await checker(true, false, true, '500', '20', 11)
 
       await toNextEpoch()
 
-      await checker(true, false, '450', '20') // epoch 8
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '450', '20', 4)
-      await checker(false, false, '450', '20', 5)
-      await checker(false, true, '450', '20', 6)
-      await checker(true, true, '450', '20', 7)
-      await checker(true, false, '450', '20', 8)
-      await checker(true, false, '450', '20', 9)
+      await checker(true, false, true, '500', '20') // epoch 11
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(false, false, false, '500', '20', 6)
+      await checker(false, false, false, '500', '20', 7)
+      await checker(true, false, true, '500', '20', 8)
+      await checker(true, true, false, '500', '20', 9)
+      await checker(true, true, false, '500', '20', 10)
+      await checker(true, false, true, '500', '20', 11)
+      await checker(true, false, true, '500', '20', 12)
 
       await toNextEpoch()
 
-      await checker(true, false, '450', '20') // epoch 9
-      await checker(true, false, '0', '0', 1)
-      await checker(true, false, '750', '10', 2)
-      await checker(true, false, '750', '20', 3)
-      await checker(true, false, '450', '20', 4)
-      await checker(false, false, '450', '20', 5)
-      await checker(false, true, '450', '20', 6)
-      await checker(true, true, '450', '20', 7)
-      await checker(true, false, '450', '20', 8)
-      await checker(true, false, '450', '20', 9)
+      await checker(true, false, true, '500', '20') // epoch 12
+      await checker(true, false, false, '0', '0', 1)
+      await checker(true, false, true, '750', '10', 2)
+      await checker(true, false, true, '750', '20', 3)
+      await checker(true, false, false, '450', '20', 4)
+      await checker(true, false, true, '500', '20', 5)
+      await checker(false, false, false, '500', '20', 6)
+      await checker(false, false, false, '500', '20', 7)
+      await checker(true, false, true, '500', '20', 8)
+      await checker(true, true, false, '500', '20', 9)
+      await checker(true, true, false, '500', '20', 10)
+      await checker(true, false, true, '500', '20', 11)
+      await checker(true, false, true, '500', '20', 12)
     })
 
-    it('getStakerInfo()', async () => {
-      await staker1.stake(Token.OAS, validator1, '500')
-      await staker1.stake(Token.OAS, validator2, '250')
-      await toNextEpoch()
+    it('getUnstakes()', async () => {
+      const check = async (expOAS: number, expWOAS: number, expSOAS: number) => {
+        const acutal = await staker1.getUnstakes()
+        expect(fromWei(acutal.oasUnstakes.toString())).to.eql('' + expOAS)
+        expect(fromWei(acutal.woasUnstakes.toString())).to.eql('' + expWOAS)
+        expect(fromWei(acutal.soasUnstakes.toString())).to.eql('' + expSOAS)
+      }
 
-      await staker1.unstake(Token.OAS, validator2, '250')
-      await toNextEpoch()
+      await check(0, 0, 0)
 
-      const acutal = await staker1.getInfo(Token.OAS)
-      expect(fromWei(acutal.stakes.toString())).to.eql('500')
-      expect(fromWei(acutal.unstakes.toString())).to.equal('250')
+      await staker1.stake(Token.OAS, validator1, '10')
+      await staker1.stake(Token.wOAS, validator1, '20')
+      await staker1.stake(Token.sOAS, validator1, '30')
+
+      await toNextEpoch()
+      await check(0, 0, 0)
+
+      await staker1.unstake(Token.OAS, validator1, '1')
+
+      await toNextEpoch()
+      await check(1, 0, 0)
+
+      await staker1.unstake(Token.wOAS, validator1, '2')
+
+      await toNextEpoch()
+      await check(1, 2, 0)
+
+      await staker1.unstake(Token.sOAS, validator1, '3')
+
+      await toNextEpoch()
+      await check(1, 2, 3)
+
+      await staker1.claimUnstakes()
+      await check(0, 0, 0)
     })
 
     it('getValidatorStakes()', async () => {
@@ -1430,8 +1698,8 @@ describe('StakeManager', () => {
       await toNextEpoch()
 
       await staker4.stake(Token.OAS, validator1, '40')
-      await staker5.stake(Token.OAS, validator1, '40')
-      await staker6.stake(Token.OAS, validator1, '40')
+      await staker5.stake(Token.OAS, validator1, '50')
+      await staker6.stake(Token.OAS, validator1, '60')
       await toNextEpoch()
 
       await staker2.unstake(Token.OAS, validator1, '20')
@@ -1460,23 +1728,40 @@ describe('StakeManager', () => {
       await validator1.expectStakes(
         5,
         [staker1, staker2, staker3, staker4, staker5, staker6],
-        ['40', '20', '30', '40', '40', '40'],
+        ['40', '20', '30', '40', '50', '60'],
       )
       await validator1.expectStakes(
         6,
         [staker1, staker2, staker3, staker4, staker5, staker6],
-        ['40', '0', '30', '40', '40', '40'],
+        ['40', '0', '30', '40', '50', '60'],
       )
       await validator1.expectStakes(
         0,
         [staker1, staker2, staker3, staker4, staker5, staker6],
-        ['40', '0', '30', '40', '40', '40'],
+        ['40', '0', '30', '40', '50', '60'],
       )
 
       // check pagination
-      await validator1.expectStakes(0, [staker1, staker2], ['40', '0'], 1, 2)
-      await validator1.expectStakes(0, [staker3, staker4], ['30', '40'], 2, 2)
-      await validator1.expectStakes(0, [staker5, staker6], ['40', '40'], 3, 2)
+      // howMany = 2
+      await validator1.expectStakes(0, [staker1, staker2], ['40', '0'], 0, 2, 2)
+      await validator1.expectStakes(0, [staker3, staker4], ['30', '40'], 2, 2, 4)
+      await validator1.expectStakes(0, [staker5, staker6], ['50', '60'], 4, 2, 6)
+      await validator1.expectStakes(0, [], [], 6, 2, 6)
+
+      // howMany = 3
+      await validator1.expectStakes(0, [staker1, staker2, staker3], ['40', '0', '30'], 0, 3, 3)
+      await validator1.expectStakes(0, [staker4, staker5, staker6], ['40', '50', '60'], 3, 3, 6)
+      await validator1.expectStakes(0, [], [], 6, 3, 6)
+
+      // howMany = 10
+      await validator1.expectStakes(
+        0,
+        [staker1, staker2, staker3, staker4, staker5, staker6],
+        ['40', '0', '30', '40', '50', '60'],
+        0,
+        10,
+        6,
+      )
     })
 
     it('getStakerStakes()', async () => {
@@ -1497,16 +1782,6 @@ describe('StakeManager', () => {
           ['0', '0', '0', '0', '0'],
           ['0', '0', '0', '0', '0'],
         ],
-        [
-          ['10', '10', '0', '35', '0'],
-          ['0', '10', '0', '15', '0'],
-          ['0', '0', '0', '20', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
       )
 
       await toNextEpoch()
@@ -1518,16 +1793,6 @@ describe('StakeManager', () => {
           ['10', '10', '0', '35', '0'],
           ['0', '10', '0', '15', '0'],
           ['0', '0', '0', '20', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
         ],
       )
 
@@ -1548,16 +1813,6 @@ describe('StakeManager', () => {
           ['0', '10', '0', '15', '0'],
           ['0', '0', '0', '20', '0'],
         ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
-        [
-          ['2', '2', '0', '3', '0'],
-          ['0', '1', '0', '0', '0'],
-          ['0', '0', '0', '1', '0'],
-        ],
       )
 
       await toNextEpoch()
@@ -1569,16 +1824,6 @@ describe('StakeManager', () => {
           ['8', '8', '0', '32', '0'],
           ['0', '9', '0', '15', '0'],
           ['0', '0', '0', '19', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
         ],
       )
 
@@ -1600,16 +1845,6 @@ describe('StakeManager', () => {
           ['0', '9', '0', '15', '0'],
           ['0', '0', '0', '19', '0'],
         ],
-        [
-          ['0', '0', '0', '3', '0'],
-          ['1', '0', '0', '0', '0'],
-          ['0', '2', '0', '0', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
       )
 
       await toNextEpoch()
@@ -1621,16 +1856,6 @@ describe('StakeManager', () => {
           ['8', '8', '0', '35', '0'],
           ['1', '9', '0', '15', '0'],
           ['0', '2', '0', '19', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
         ],
       )
 
@@ -1650,16 +1875,6 @@ describe('StakeManager', () => {
           ['1', '9', '0', '15', '0'],
           ['0', '2', '0', '19', '0'],
         ],
-        [
-          ['5', '0', '0', '0', '0'],
-          ['0', '10', '0', '0', '0'],
-          ['0', '0', '0', '15', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
       )
 
       await toNextEpoch()
@@ -1672,31 +1887,11 @@ describe('StakeManager', () => {
           ['1', '19', '0', '15', '0'],
           ['0', '2', '0', '34', '0'],
         ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
       )
 
       await staker1.expectStakes(
         1,
         [validator1, validator2, validator3, validator4, fixedValidator],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
-        [
-          ['10', '10', '0', '35', '0'],
-          ['0', '10', '0', '15', '0'],
-          ['0', '0', '0', '20', '0'],
-        ],
         [
           ['0', '0', '0', '0', '0'],
           ['0', '0', '0', '0', '0'],
@@ -1712,16 +1907,6 @@ describe('StakeManager', () => {
           ['0', '10', '0', '15', '0'],
           ['0', '0', '0', '20', '0'],
         ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-        ],
-        [
-          ['2', '2', '0', '3', '0'],
-          ['0', '1', '0', '0', '0'],
-          ['0', '0', '0', '1', '0'],
-        ],
       )
 
       await staker1.expectStakes(
@@ -1731,16 +1916,6 @@ describe('StakeManager', () => {
           ['8', '8', '0', '32', '0'],
           ['0', '9', '0', '15', '0'],
           ['0', '0', '0', '19', '0'],
-        ],
-        [
-          ['0', '0', '0', '3', '0'],
-          ['1', '0', '0', '0', '0'],
-          ['0', '2', '0', '0', '0'],
-        ],
-        [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
         ],
       )
 
@@ -1752,16 +1927,74 @@ describe('StakeManager', () => {
           ['1', '9', '0', '15', '0'],
           ['0', '2', '0', '19', '0'],
         ],
+      )
+
+      // check pagination
+      // howMany = 2
+      await staker1.expectStakes(
+        4,
+        [validator1, validator2],
         [
-          ['5', '0', '0', '0', '0'],
-          ['0', '10', '0', '0', '0'],
-          ['0', '0', '0', '15', '0'],
+          ['8', '8'],
+          ['1', '9'],
+          ['0', '2'],
         ],
+        0,
+        2,
+        2,
+      )
+      await staker1.expectStakes(
+        4,
+        [validator3, validator4],
         [
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0'],
+          ['0', '35'],
+          ['0', '15'],
+          ['0', '19'],
         ],
+        2,
+        2,
+        4,
+      )
+      await staker1.expectStakes(4, [fixedValidator], [['0'], ['0'], ['0']], 4, 2, 5)
+
+      // howMany = 3
+      await staker1.expectStakes(
+        4,
+        [validator1, validator2, validator3],
+        [
+          ['8', '8', '0'],
+          ['1', '9', '0'],
+          ['0', '2', '0'],
+        ],
+        0,
+        3,
+        3,
+      )
+      await staker1.expectStakes(
+        4,
+        [validator4, fixedValidator],
+        [
+          ['35', '0'],
+          ['15', '0'],
+          ['19', '0'],
+        ],
+        3,
+        3,
+        5,
+      )
+
+      // howMany = 10
+      await staker1.expectStakes(
+        4,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['8', '8', '0', '35', '0'],
+          ['1', '9', '0', '15', '0'],
+          ['0', '2', '0', '19', '0'],
+        ],
+        0,
+        10,
+        5,
       )
     })
 
@@ -1792,8 +2025,11 @@ describe('StakeManager', () => {
     })
 
     it('getTotalRewards()', async () => {
-      const checker = async (expectEther: string, epochs: number) => {
-        let actual: BigNumber = await stakeManager.getTotalRewards(epochs)
+      const checker = async (validators: Validator[], epochs: number, expectEther: string) => {
+        let actual: BigNumber = await stakeManager.getTotalRewards(
+          validators.map((x) => x.owner.address),
+          epochs,
+        )
         expect(fromWei(actual.toString())).to.match(new RegExp(`^${expectEther}`))
       }
 
@@ -1815,11 +2051,17 @@ describe('StakeManager', () => {
       await toNextEpoch() // 5
       await toNextEpoch() // 6
 
-      await checker('0.0456621', 1)
-      await checker('0.0970319', 2)
-      await checker('0.1484018', 3)
-      await checker('0.1883561', 4)
-      await checker('0.2283105', 5)
+      await checker([fixedValidator], 1, '0.00570776')
+      await checker([fixedValidator], 2, '0.01141552')
+      await checker([fixedValidator], 3, '0.01712328')
+      await checker([fixedValidator], 4, '0.02283105')
+      await checker([fixedValidator], 5, '0.02853881')
+
+      await checker([fixedValidator, validator1, validator2], 1, '0.0456621')
+      await checker([fixedValidator, validator1, validator2], 2, '0.0970319')
+      await checker([fixedValidator, validator1, validator2], 3, '0.1484018')
+      await checker([fixedValidator, validator1, validator2], 4, '0.1883561')
+      await checker([fixedValidator, validator1, validator2], 5, '0.2283105')
     })
   })
 })
