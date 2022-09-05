@@ -95,25 +95,6 @@
         },
         {
           "indexed": false,
-          "internalType": "uint256",
-          "name": "rate",
-          "type": "uint256"
-        }
-      ],
-      "name": "ValidatorCommissionRateUpdated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "validator",
-          "type": "address"
-        },
-        {
-          "indexed": false,
           "internalType": "uint256[]",
           "name": "epochs",
           "type": "uint256[]"
@@ -194,6 +175,11 @@
       "inputs": [
         {
           "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
           "name": "validator",
           "type": "address"
         },
@@ -209,7 +195,13 @@
       "type": "function"
     },
     {
-      "inputs": [],
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        }
+      ],
       "name": "claimUnstakes",
       "outputs": [],
       "stateMutability": "nonpayable",
@@ -287,52 +279,6 @@
       "type": "function"
     },
     {
-      "inputs": [],
-      "name": "getCurrentValidators",
-      "outputs": [
-        {
-          "internalType": "address[]",
-          "name": "owners",
-          "type": "address[]"
-        },
-        {
-          "internalType": "address[]",
-          "name": "operators",
-          "type": "address[]"
-        },
-        {
-          "internalType": "uint256[]",
-          "name": "stakes",
-          "type": "uint256[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "getNextValidators",
-      "outputs": [
-        {
-          "internalType": "address[]",
-          "name": "owners",
-          "type": "address[]"
-        },
-        {
-          "internalType": "address[]",
-          "name": "operators",
-          "type": "address[]"
-        },
-        {
-          "internalType": "uint256[]",
-          "name": "stakes",
-          "type": "uint256[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
       "inputs": [
         {
           "internalType": "address",
@@ -369,42 +315,18 @@
           "type": "address"
         },
         {
-          "internalType": "enum Token.Type",
-          "name": "token",
-          "type": "uint8"
-        }
-      ],
-      "name": "getStakerInfo",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "stakes",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "unstakes",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "staker",
-          "type": "address"
-        },
-        {
-          "internalType": "enum Token.Type",
-          "name": "token",
-          "type": "uint8"
-        },
-        {
           "internalType": "uint256",
           "name": "epoch",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "cursor",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "howMany",
           "type": "uint256"
         }
       ],
@@ -412,23 +334,28 @@
       "outputs": [
         {
           "internalType": "address[]",
-          "name": "_validators",
+          "name": "validators",
           "type": "address[]"
         },
         {
           "internalType": "uint256[]",
-          "name": "stakes",
+          "name": "oasStakes",
           "type": "uint256[]"
         },
         {
           "internalType": "uint256[]",
-          "name": "stakeRequests",
+          "name": "woasStakes",
           "type": "uint256[]"
         },
         {
           "internalType": "uint256[]",
-          "name": "unstakeRequests",
+          "name": "soasStakes",
           "type": "uint256[]"
+        },
+        {
+          "internalType": "uint256",
+          "name": "newCursor",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -438,12 +365,12 @@
       "inputs": [
         {
           "internalType": "uint256",
-          "name": "page",
+          "name": "cursor",
           "type": "uint256"
         },
         {
           "internalType": "uint256",
-          "name": "perPage",
+          "name": "howMany",
           "type": "uint256"
         }
       ],
@@ -451,8 +378,13 @@
       "outputs": [
         {
           "internalType": "address[]",
-          "name": "",
+          "name": "stakers",
           "type": "address[]"
+        },
+        {
+          "internalType": "uint256",
+          "name": "newCursor",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -460,6 +392,11 @@
     },
     {
       "inputs": [
+        {
+          "internalType": "address[]",
+          "name": "validators",
+          "type": "address[]"
+        },
         {
           "internalType": "uint256",
           "name": "epochs",
@@ -480,9 +417,62 @@
     {
       "inputs": [
         {
+          "internalType": "uint256",
+          "name": "epoch",
+          "type": "uint256"
+        }
+      ],
+      "name": "getTotalStake",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "amounts",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        }
+      ],
+      "name": "getUnstakes",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "oasUnstakes",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "woasUnstakes",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "soasUnstakes",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "address",
           "name": "validator",
           "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "epoch",
+          "type": "uint256"
         }
       ],
       "name": "getValidatorInfo",
@@ -503,13 +493,13 @@
           "type": "bool"
         },
         {
-          "internalType": "uint256",
-          "name": "stakes",
-          "type": "uint256"
+          "internalType": "bool",
+          "name": "candidate",
+          "type": "bool"
         },
         {
           "internalType": "uint256",
-          "name": "commissionRate",
+          "name": "stakes",
           "type": "uint256"
         }
       ],
@@ -519,36 +509,26 @@
     {
       "inputs": [
         {
-          "internalType": "address",
-          "name": "validator",
-          "type": "address"
+          "internalType": "uint256",
+          "name": "cursor",
+          "type": "uint256"
         },
         {
           "internalType": "uint256",
-          "name": "epoch",
+          "name": "howMany",
           "type": "uint256"
         }
       ],
-      "name": "getValidatorInfo",
+      "name": "getValidatorOwners",
       "outputs": [
         {
-          "internalType": "bool",
-          "name": "active",
-          "type": "bool"
-        },
-        {
-          "internalType": "bool",
-          "name": "jailed",
-          "type": "bool"
+          "internalType": "address[]",
+          "name": "owners",
+          "type": "address[]"
         },
         {
           "internalType": "uint256",
-          "name": "stakes",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "commissionRate",
+          "name": "newCursor",
           "type": "uint256"
         }
       ],
@@ -569,12 +549,12 @@
         },
         {
           "internalType": "uint256",
-          "name": "page",
+          "name": "cursor",
           "type": "uint256"
         },
         {
           "internalType": "uint256",
-          "name": "perPage",
+          "name": "howMany",
           "type": "uint256"
         }
       ],
@@ -582,26 +562,67 @@
       "outputs": [
         {
           "internalType": "address[]",
-          "name": "_stakers",
+          "name": "stakers",
           "type": "address[]"
         },
         {
           "internalType": "uint256[]",
           "name": "stakes",
           "type": "uint256[]"
+        },
+        {
+          "internalType": "uint256",
+          "name": "newCursor",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
       "type": "function"
     },
     {
-      "inputs": [],
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "epoch",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "cursor",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "howMany",
+          "type": "uint256"
+        }
+      ],
       "name": "getValidators",
       "outputs": [
         {
           "internalType": "address[]",
-          "name": "",
+          "name": "owners",
           "type": "address[]"
+        },
+        {
+          "internalType": "address[]",
+          "name": "operators",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "stakes",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "bool[]",
+          "name": "candidates",
+          "type": "bool[]"
+        },
+        {
+          "internalType": "uint256",
+          "name": "newCursor",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -698,19 +719,6 @@
         }
       ],
       "name": "unstake",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "newRate",
-          "type": "uint256"
-        }
-      ],
-      "name": "updateCommissionRate",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

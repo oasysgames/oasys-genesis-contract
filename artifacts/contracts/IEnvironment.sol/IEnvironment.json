@@ -17,14 +17,15 @@
       "type": "function"
     },
     {
-      "inputs": [],
-      "name": "epochAndValues",
-      "outputs": [
+      "inputs": [
         {
-          "internalType": "uint256[]",
-          "name": "epochs",
-          "type": "uint256[]"
-        },
+          "internalType": "uint256",
+          "name": "_epoch",
+          "type": "uint256"
+        }
+      ],
+      "name": "findValue",
+      "outputs": [
         {
           "components": [
             {
@@ -54,6 +55,11 @@
             },
             {
               "internalType": "uint256",
+              "name": "commissionRate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
               "name": "validatorThreshold",
               "type": "uint256"
             },
@@ -68,9 +74,9 @@
               "type": "uint256"
             }
           ],
-          "internalType": "struct IEnvironment.EnvironmentValue[]",
-          "name": "_values",
-          "type": "tuple[]"
+          "internalType": "struct IEnvironment.EnvironmentValue",
+          "name": "",
+          "type": "tuple"
         }
       ],
       "stateMutability": "view",
@@ -103,6 +109,11 @@
             {
               "internalType": "uint256",
               "name": "rewardRate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "commissionRate",
               "type": "uint256"
             },
             {
@@ -190,6 +201,11 @@
             },
             {
               "internalType": "uint256",
+              "name": "commissionRate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
               "name": "validatorThreshold",
               "type": "uint256"
             },
@@ -239,6 +255,11 @@
             {
               "internalType": "uint256",
               "name": "rewardRate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "commissionRate",
               "type": "uint256"
             },
             {
@@ -296,6 +317,11 @@
             {
               "internalType": "uint256",
               "name": "rewardRate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "commissionRate",
               "type": "uint256"
             },
             {
