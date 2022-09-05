@@ -12,6 +12,7 @@ const initialValue: EnvironmentValue = {
   blockPeriod: 10,
   epochPeriod: 100,
   rewardRate: 10,
+  commissionRate: 0,
   validatorThreshold: toWei('500', 'ether'),
   jailThreshold: 50,
   jailPeriod: 2,
@@ -21,6 +22,7 @@ const expectValues = (actual: EnvironmentValue, expect_: EnvironmentValue) => {
   expect(actual.blockPeriod).to.equal(expect_.blockPeriod)
   expect(actual.epochPeriod).to.equal(expect_.epochPeriod)
   expect(actual.rewardRate).to.equal(expect_.rewardRate)
+  expect(actual.commissionRate).to.equal(expect_.commissionRate)
   expect(actual.validatorThreshold).to.equal(expect_.validatorThreshold)
   expect(actual.jailThreshold).to.equal(expect_.jailThreshold)
   expect(actual.jailPeriod).to.equal(expect_.jailPeriod)
@@ -232,7 +234,7 @@ describe('Environment', () => {
     ])
   })
 
-  it('epochAndValues()', async () => {
+  it('findValue()', async () => {
     const value1 = { ...initialValue, startEpoch: 4, rewardRate: 1 }
     const value2 = { ...initialValue, startEpoch: 7, rewardRate: 2 }
     const value3 = { ...initialValue, startEpoch: 10, rewardRate: 3 }
@@ -248,12 +250,21 @@ describe('Environment', () => {
     await environment.updateValue(value3)
     await mining(1000)
 
-    const { epochs, _values } = await environment.epochAndValues()
-    expect(epochs.map((x: BigNumber) => x.toNumber())).to.eql([1, 4, 7, 10])
-    expect(_values.length).to.equal(4)
-    expectValues(_values[0], initialValue)
-    expectValues(_values[1], value1)
-    expectValues(_values[2], value2)
-    expectValues(_values[3], value3)
+    expectValues(await environment.findValue(1), initialValue)
+    expectValues(await environment.findValue(2), initialValue)
+    expectValues(await environment.findValue(3), initialValue)
+
+    expectValues(await environment.findValue(4), value1)
+    expectValues(await environment.findValue(5), value1)
+    expectValues(await environment.findValue(6), value1)
+
+    expectValues(await environment.findValue(7), value2)
+    expectValues(await environment.findValue(8), value2)
+    expectValues(await environment.findValue(9), value2)
+
+    expectValues(await environment.findValue(10), value3)
+    expectValues(await environment.findValue(11), value3)
+    expectValues(await environment.findValue(12), value3)
+    expectValues(await environment.findValue(13), value3)
   })
 })

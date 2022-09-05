@@ -4,6 +4,7 @@ pragma solidity 0.8.12;
 
 import { System } from "./System.sol";
 import { IEnvironment } from "./IEnvironment.sol";
+import { UpdateHistories } from "./lib/UpdateHistories.sol";
 import { EnvironmentValue as EnvironmentValueLib } from "./lib/EnvironmentValue.sol";
 
 // Not executable in the last block of epoch.
@@ -17,6 +18,7 @@ error PastEpoch();
  * @dev The Environment contract has parameters for proof-of-stake.
  */
 contract Environment is IEnvironment, System {
+    using UpdateHistories for uint256[];
     using EnvironmentValueLib for EnvironmentValue;
 
     /*************
@@ -103,8 +105,8 @@ contract Environment is IEnvironment, System {
     /**
      * @inheritdoc IEnvironment
      */
-    function epochAndValues() external view returns (uint256[] memory epochs, EnvironmentValue[] memory _values) {
-        return (updates, values);
+    function findValue(uint256 _epoch) external view returns (EnvironmentValue memory) {
+        return updates.find(values, _epoch);
     }
 
     /*********************

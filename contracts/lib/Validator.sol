@@ -61,16 +61,6 @@ library Validator {
         _updateInactives(validator, epoch, epochs, true);
     }
 
-    function updateCommissionRate(
-        IStakeManager.Validator storage validator,
-        IEnvironment environment,
-        uint256 newRate
-    ) internal {
-        if (newRate > Constants.MAX_COMMISSION_RATE) revert OverRate();
-
-        validator.lastCommissionUpdates.set(validator.commissionRates, environment.epoch() + 1, newRate);
-    }
-
     function stake(
         IStakeManager.Validator storage validator,
         IEnvironment environment,
@@ -137,14 +127,6 @@ library Validator {
         return validator.inactives[epoch];
     }
 
-    function getCommissionRate(IStakeManager.Validator storage validator, uint256 epoch)
-        internal
-        view
-        returns (uint256)
-    {
-        return validator.lastCommissionUpdates.find(validator.commissionRates, epoch);
-    }
-
     function getTotalStake(IStakeManager.Validator storage validator, uint256 epoch) internal view returns (uint256) {
         return validator.stakeUpdates.find(validator.stakeAmounts, epoch);
     }
@@ -187,10 +169,11 @@ library Validator {
         uint256 rewards = getRewards(validator, env, epoch);
         if (rewards == 0) return 0;
 
-        uint256 commissionRate = getCommissionRate(validator, epoch);
-        if (commissionRate == 0) return rewards;
+        if (env.commissionRate == 0) return rewards;
 
-        return rewards - Math.share(rewards, commissionRate, Constants.MAX_COMMISSION_RATE, Constants.REWARD_PRECISION);
+        return
+            rewards -
+            Math.share(rewards, env.commissionRate, Constants.MAX_COMMISSION_RATE, Constants.REWARD_PRECISION);
     }
 
     function getCommissions(
@@ -204,20 +187,18 @@ library Validator {
             epochs = prevEpoch - lastClaim;
         }
 
-        (uint256[] memory envUpdates, IEnvironment.EnvironmentValue[] memory envValues) = environment.epochAndValues();
-
         for (uint256 i = 0; i < epochs; i++) {
             lastClaim += 1;
+            IEnvironment.EnvironmentValue memory env = environment.findValue(lastClaim);
 
-            uint256 rewards = getRewards(validator, envUpdates.find(envValues, lastClaim), lastClaim);
+            uint256 rewards = getRewards(validator, env, lastClaim);
             if (rewards == 0) continue;
 
-            uint256 commissionRate = getCommissionRate(validator, lastClaim);
-            if (commissionRate == 0) continue;
+            if (env.commissionRate == 0) continue;
 
             commissions += Math.share(
                 rewards,
-                commissionRate,
+                env.commissionRate,
                 Constants.MAX_COMMISSION_RATE,
                 Constants.REWARD_PRECISION
             );

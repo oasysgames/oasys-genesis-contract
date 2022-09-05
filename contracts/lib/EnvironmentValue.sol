@@ -37,6 +37,9 @@ library EnvironmentValue {
         if (value.rewardRate > Constants.MAX_REWARD_RATE) {
             revert ValidationError("rewardRate is too large.");
         }
+        if (value.commissionRate > Constants.MAX_COMMISSION_RATE) {
+            revert ValidationError("commissionRate is too large.");
+        }
         if (value.validatorThreshold < Constants.MIN_VALIDATOR_THRESHOLD) {
             revert ValidationError("validatorThreshold is too small.");
         }
