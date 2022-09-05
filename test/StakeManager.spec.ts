@@ -1984,6 +1984,71 @@ describe('StakeManager', () => {
       await validator2.expectSlashes(7, 0, 0) // current epoch
     })
 
+    it('getTotalStake()', async () => {
+      const checker = async (epoch: number, expect_: string) => {
+        const actual = await stakeManager.getTotalStake(epoch)
+        expect(fromWei(actual.toString())).to.eql(expect_)
+      }
+
+      await checker(0, '0')
+      await checker(2, '500')
+
+      await staker1.stake(Token.OAS, validator1, '10')
+
+      await checker(0, '0')
+      await checker(2, '510')
+
+      await toNextEpoch()
+
+      await checker(0, '510')
+      await checker(3, '510')
+
+      await staker1.stake(Token.OAS, validator1, '20')
+
+      await checker(0, '510')
+      await checker(3, '530')
+
+      await toNextEpoch()
+
+      await checker(0, '530')
+      await checker(4, '530')
+
+      await staker1.unstake(Token.OAS, validator1, '1')
+
+      await checker(0, '530')
+      await checker(4, '529')
+
+      await toNextEpoch()
+
+      await checker(0, '529')
+      await checker(5, '529')
+
+      await staker1.unstake(Token.OAS, validator1, '2')
+
+      await checker(0, '529')
+      await checker(5, '527')
+
+      await toNextEpoch()
+
+      await checker(0, '527')
+      await checker(6, '527')
+
+      await staker1.stake(Token.OAS, validator1, '30')
+
+      await checker(0, '527')
+      await checker(6, '557')
+
+      await staker1.unstake(Token.OAS, validator1, '3')
+
+      await checker(0, '527')
+      await checker(6, '554')
+
+      await toNextEpoch()
+
+      await checker(0, '554')
+      await checker(7, '554')
+    })
+
     it('getTotalRewards()', async () => {
       const checker = async (validators: Validator[], epochs: number, expectEther: string) => {
         let actual: BigNumber = await stakeManager.getTotalRewards(

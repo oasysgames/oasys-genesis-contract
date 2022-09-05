@@ -56,6 +56,10 @@ contract StakeManager is IStakeManager, System {
      * Variables *
      *************/
 
+    // Stake updated epochs
+    uint256[] public stakeUpdates;
+    // Stake amounts per epoch
+    uint256[] public stakeAmounts;
     // List of validators
     mapping(address => Validator) public validators;
     address[] public validatorOwners;
@@ -222,6 +226,8 @@ contract StakeManager is IStakeManager, System {
     ) external payable validatorExists(validator) onlyNotLastBlock {
         if (amount == 0) revert NoAmount();
 
+        stakeUpdates.add(stakeAmounts, environment.epoch() + 1, amount);
+
         Token.receives(token, msg.sender, amount);
         Staker storage staker = stakers[msg.sender];
         if (staker.signer == address(0)) {
@@ -241,6 +247,8 @@ contract StakeManager is IStakeManager, System {
         uint256 amount
     ) external validatorExists(validator) stakerExists(msg.sender) onlyNotLastBlock {
         if (amount == 0) revert NoAmount();
+
+        stakeUpdates.sub(stakeAmounts, environment.epoch() + 1, amount);
 
         amount = stakers[msg.sender].unstake(environment, validators[validator], token, amount);
         emit Unstaked(msg.sender, validator, token, amount);
@@ -407,6 +415,15 @@ contract StakeManager is IStakeManager, System {
     ) external view returns (uint256 rewards) {
         (rewards, ) = stakers[staker].getRewards(environment, validators[validator], epochs);
         return rewards;
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function getTotalStake(uint256 epoch) external view returns (uint256 amounts) {
+        epoch = epoch > 0 ? epoch : environment.epoch();
+        amounts = stakeUpdates.find(stakeAmounts, epoch);
+        return amounts;
     }
 
     /**

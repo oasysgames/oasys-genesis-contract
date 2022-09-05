@@ -34,7 +34,7 @@ interface IStakeManager {
         mapping(uint256 => bool) inactives;
         // List of jailed epoch numbers.
         mapping(uint256 => bool) jails;
-        // Stake last updated epoch
+        // Stake updated epochs
         uint256[] stakeUpdates;
         // Stake amounts per epoch
         uint256[] stakeAmounts;
@@ -52,7 +52,7 @@ interface IStakeManager {
     struct Staker {
         // Staker address
         address signer;
-        // Stake last updated epoch
+        // Stake updated epochs
         mapping(Token.Type => mapping(address => uint256[])) stakeUpdates;
         // Stake amounts per epoch
         mapping(Token.Type => mapping(address => uint256[])) stakeAmounts;
@@ -289,6 +289,13 @@ interface IStakeManager {
         address validator,
         uint256 epochs
     ) external view returns (uint256 rewards);
+
+    /**
+     * Returns total staked amounts.
+     * @param epoch Target epoch number.
+     * @return amounts Total staked amounts.
+     */
+    function getTotalStake(uint256 epoch) external view returns (uint256 amounts);
 
     /**
      * Returns the total staking reward from addresses and epoch period.
