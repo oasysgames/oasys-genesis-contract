@@ -222,12 +222,12 @@ const toBNWei = (ether: string) => BigNumber.from(toWei(ether))
 
 const makeSignature = async (signer: Account, hash: string, chainid: number, expiration: number): Promise<string> => {
   const values = [
-    { type: 'bytes32', value: hash },
     { type: 'uint256', value: String(chainid) },
+    { type: 'bytes32', value: hash },
     { type: 'uint64', value: String(expiration) },
   ]
-  const msg = web3.utils.encodePacked(...values)
-  return await signer.signMessage(toBuffer(msg!))
+  const msg = ethers.utils.keccak256(web3.utils.encodePacked(...values)!)
+  return await signer.signMessage(toBuffer(msg))
 }
 
 const makeHashWithNonce = (nonce: number, to: string, encodedSelector: string) => {

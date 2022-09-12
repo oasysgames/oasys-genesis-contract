@@ -64,8 +64,8 @@ contract Signers {
         uint256 chainid = block.chainid;
         for (uint256 i = 0; i < signatureCount; i++) {
             address _signer = _recoverSigner(
-                _hash,
                 chainid,
+                _hash,
                 expiration,
                 signatures,
                 i * 65
@@ -82,8 +82,8 @@ contract Signers {
     }
 
     function _recoverSigner(
-        bytes32 _hash,
         uint256 chainid,
+        bytes32 _hash,
         uint64 expiration,
         bytes memory signatures,
         uint256 index
@@ -92,10 +92,8 @@ contract Signers {
 
         _hash = keccak256(
             abi.encodePacked(
-                "\x19Ethereum Signed Message:\n72",
-                _hash,
-                chainid,
-                expiration
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(abi.encodePacked(chainid, _hash, expiration))
             )
         );
         (address recovered, ) = ECDSA.tryRecover(
