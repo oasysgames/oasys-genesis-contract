@@ -18,71 +18,139 @@ const setBlockTimestamp = async (dates: string) => {
 describe('SOAS', () => {
   let soas: Contract
   let genesis: Account
-  let user: Account
+  let originalClaimer: Account
+  let allowedClaimer: Account
 
   before(async () => {
     const accounts = await ethers.getSigners()
     genesis = accounts[1]
-    user = accounts[2]
+    originalClaimer = accounts[2]
+    allowedClaimer = accounts[3]
   })
 
   beforeEach(async () => {
     await network.provider.send('hardhat_reset')
-    soas = await (await ethers.getContractFactory('SOAS')).deploy(zeroAddress)
+    soas = await (await ethers.getContractFactory('SOAS')).deploy([zeroAddress, zeroAddress])
   })
 
-  it('claim()', async () => {
-    const expectBalance = async (expectOAS: string, expectSOAS: string) => {
+  describe('claim()', async () => {
+    const expectBalance = async (user: Account, expOAS: number, expSOAS: number) => {
       const actualOAS = fromWei((await user.getBalance()).toString())
       const actualSOAS = fromWei((await soas.balanceOf(user.address)).toString())
-      expect(actualOAS).to.match(new RegExp(`^${expectOAS}`))
-      expect(actualSOAS).to.match(new RegExp(`^${expectSOAS}`))
+      expect(actualOAS).to.match(new RegExp(`^${expOAS + 10000}`))
+      expect(actualSOAS).to.match(new RegExp(`^${expSOAS}`))
+    }
+    const expectClaimableOAS = async (original: Account, exp: number) => {
+      const actual = fromWei((await soas.getClaimableOAS(original.address)).toString())
+      expect(actual).to.match(new RegExp(`^${exp}`))
+    }
+    const expectTotalSupply = async (exp: number) => {
+      const actual = fromWei((await soas.totalSupply()).toString())
+      expect(actual).to.match(new RegExp(`^${exp}`))
     }
 
-    // initial balance.
-    await expectBalance('10000', '0')
+    it('claim from original claimer', async () => {
+      // initial balance.
+      await expectBalance(originalClaimer, 0, 0)
+      await expectTotalSupply(0)
 
-    // minting.
-    await setBlockTimestamp('2100/01/01')
-    await soas.connect(genesis).mint(user.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
-      value: toWei('100', 'ether'),
+      // minting.
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100'),
+        })
+
+      // after minted.
+      await expectBalance(originalClaimer, 0, 100)
+      await expectTotalSupply(100)
+
+      // 1 month elapsed.
+      await setBlockTimestamp('2100/07/31')
+      await soas.connect(originalClaimer).claim(toWei('16'))
+      await expectBalance(originalClaimer, 16, 84)
+      await expectTotalSupply(84)
+
+      // 2 month elapsed.
+      await setBlockTimestamp('2100/08/31')
+      await soas.connect(originalClaimer).claim(toWei('16'))
+      await expectBalance(originalClaimer, 32, 68)
+      await expectTotalSupply(68)
+
+      // 3 month elapsed.
+      await setBlockTimestamp('2100/09/31')
+      await soas.connect(originalClaimer).claim(toWei('16', 'ether'))
+      await expectBalance(originalClaimer, 48, 52)
+      await expectTotalSupply(52)
+
+      // 4 month elapsed.
+      await setBlockTimestamp('2100/10/31')
+      await soas.connect(originalClaimer).claim(toWei('16', 'ether'))
+      await expectBalance(originalClaimer, 64, 36)
+      await expectTotalSupply(36)
+
+      // 5 month elapsed.
+      await setBlockTimestamp('2100/11/31')
+      await soas.connect(originalClaimer).claim(toWei('16', 'ether'))
+      await expectBalance(originalClaimer, 80, 20)
+      await expectTotalSupply(20)
+
+      // 6 month elapsed.
+      await setBlockTimestamp('2100/12/31')
+      await soas.connect(originalClaimer).claim(toWei('20', 'ether'))
+      await expectBalance(originalClaimer, 100, 0)
+      await expectTotalSupply(0)
+
+      // insufficient balance.
+      await setBlockTimestamp('2101/01/01')
+      await expect(soas.connect(originalClaimer).claim(toWei('0.00001', 'ether'))).to.revertedWith('OverAmount()')
     })
 
-    // after minted.
-    await expectBalance('10000', '100')
+    it('claim from allowed claimer', async () => {
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100', 'ether'),
+        })
 
-    // 1 month elapsed.
-    await setBlockTimestamp('2100/07/31')
-    await soas.connect(user).claim(toWei('16', 'ether'))
-    await expectBalance('10016', '84')
+      await expectBalance(originalClaimer, 0, 100)
+      await expectBalance(allowedClaimer, 0, 0)
+      await expectClaimableOAS(originalClaimer, 0)
+      await expectClaimableOAS(allowedClaimer, 0)
+      await expectTotalSupply(100)
 
-    // 2 month elapsed.
-    await setBlockTimestamp('2100/08/31')
-    await soas.connect(user).claim(toWei('16', 'ether'))
-    await expectBalance('10032', '68')
+      await setBlockTimestamp('2100/08/31')
 
-    // 3 month elapsed.
-    await setBlockTimestamp('2100/09/31')
-    await soas.connect(user).claim(toWei('16', 'ether'))
-    await expectBalance('10048', '52')
+      // claim from original claimer.
+      await soas.connect(originalClaimer).claim(toWei('5'))
+      await expectBalance(originalClaimer, 5, 95)
+      await expectBalance(allowedClaimer, 0, 0)
+      await expectTotalSupply(95)
 
-    // 4 month elapsed.
-    await setBlockTimestamp('2100/10/31')
-    await soas.connect(user).claim(toWei('16', 'ether'))
-    await expectBalance('10064', '36')
+      // transfer.
+      await soas.connect(genesis).allow(originalClaimer.address, allowedClaimer.address)
+      await soas.connect(originalClaimer).transfer(allowedClaimer.address, toWei('10'))
+      await expectBalance(originalClaimer, 5, 85)
+      await expectBalance(allowedClaimer, 0, 10)
+      await expectTotalSupply(95)
 
-    // 5 month elapsed.
-    await setBlockTimestamp('2100/11/31')
-    await soas.connect(user).claim(toWei('16', 'ether'))
-    await expectBalance('10080', '20')
+      // claim from allowed claimer.
+      await soas.connect(allowedClaimer).claim(toWei('5'))
+      await expectBalance(originalClaimer, 5, 85)
+      await expectBalance(allowedClaimer, 5, 5)
+      await expectTotalSupply(90)
 
-    // 6 month elapsed.
-    await setBlockTimestamp('2100/12/31')
-    await soas.connect(user).claim(toWei('20', 'ether'))
-    await expectBalance('10100', '0')
+      await soas.connect(allowedClaimer).claim(toWei('5'))
+      await expectBalance(originalClaimer, 5, 85)
+      await expectBalance(allowedClaimer, 10, 0)
+      await expectTotalSupply(85)
 
-    // insufficient balance.
-    await setBlockTimestamp('2101/01/01')
-    await expect(soas.connect(user).claim(toWei('0.00001', 'ether'))).to.revertedWith('OverAmount()')
+      await soas.connect(originalClaimer).claim(toWei('18'))
+      await expectBalance(originalClaimer, 5 + 18, 85 - 18)
+      await expectBalance(allowedClaimer, 10, 0)
+      await expectTotalSupply(85 - 18)
+    })
   })
 })
