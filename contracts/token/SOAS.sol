@@ -156,6 +156,53 @@ contract SOAS is ERC20 {
     }
 
     /**
+     * Bulk allow
+     * @param originals List of original address.
+     * @param alloweds List of allowed address.
+     */
+    function allow(address[] memory originals, address[] memory alloweds) external {
+        require(originals.length == alloweds.length, "SOAS: bulk allow args must be equals");
+        for (uint256 i; i < originals.length; i++) {
+            this.allow(originals[i], alloweds[i]);
+        }
+    }
+
+    /**
+     * Bulk transfer
+     * @param tos List of receipient address.
+     * @param amounts List of amount.
+     */
+    function transfer(address[] memory tos, uint256[] memory amounts) public returns (bool) {
+        require(tos.length == amounts.length, "SOAS: bulk transfer args must be equals");
+        address owner = _msgSender();
+        for (uint256 i; i < tos.length; i++) {
+            _transfer(owner, tos[i], amounts[i]);
+        }
+        return true;
+    }
+
+    /**
+     * Bulk transferFrom
+     * @param froms List of sender address.
+     * @param tos List of receipient address.
+     * @param amounts List of amount.
+     */
+    function transferFrom(
+        address[] memory froms,
+        address[] memory tos,
+        uint256[] memory amounts
+    ) public returns (bool) {
+        require(
+            froms.length == tos.length && tos.length == amounts.length,
+            "SOAS: bulk transferFrom args must be equals"
+        );
+        for (uint256 i; i < froms.length; i++) {
+            transferFrom(froms[i], tos[i], amounts[i]);
+        }
+        return true;
+    }
+
+    /**
      * Get current amount of the SOAS available for conversion.
      * @param original Holder of the SOAS token.
      */
