@@ -110,11 +110,21 @@ contract SOAS is ERC20 {
      */
     function allow(address original, address allowed) external {
         if (claimInfo[original].from != msg.sender) revert InvalidMinter();
-        if (originalClaimer[allowed] != address(0)) revert AlreadyClaimer();
 
-        originalClaimer[allowed] = original;
+        _allow(original, allowed);
+    }
 
-        emit Allow(original, allowed);
+    /**
+     * Bulk allow
+     * @param original Address of the claimer.
+     * @param alloweds List of allowed address.
+     */
+    function allow(address original, address[] memory alloweds) external {
+        if (claimInfo[original].from != msg.sender) revert InvalidMinter();
+
+        for (uint256 i; i < alloweds.length; i++) {
+            _allow(original, alloweds[i]);
+        }
     }
 
     /**
@@ -153,18 +163,6 @@ contract SOAS is ERC20 {
         if (!success) revert TransferFailed();
 
         emit Renounce(originalClaimer[msg.sender], amount);
-    }
-
-    /**
-     * Bulk allow
-     * @param originals List of original address.
-     * @param alloweds List of allowed address.
-     */
-    function allow(address[] memory originals, address[] memory alloweds) external {
-        require(originals.length == alloweds.length, "SOAS: bulk allow args must be equals");
-        for (uint256 i; i < originals.length; i++) {
-            this.allow(originals[i], alloweds[i]);
-        }
     }
 
     /**
@@ -251,5 +249,16 @@ contract SOAS is ERC20 {
             }
         }
         return false;
+    }
+
+    /**
+     * Allow the transferable address for the claimer address.
+     */
+    function _allow(address original, address allowed) internal {
+        if (originalClaimer[allowed] != address(0)) revert AlreadyClaimer();
+
+        originalClaimer[allowed] = original;
+
+        emit Allow(original, allowed);
     }
 }
