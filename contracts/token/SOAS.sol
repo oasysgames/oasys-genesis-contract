@@ -110,11 +110,21 @@ contract SOAS is ERC20 {
      */
     function allow(address original, address allowed) external {
         if (claimInfo[original].from != msg.sender) revert InvalidMinter();
-        if (originalClaimer[allowed] != address(0)) revert AlreadyClaimer();
 
-        originalClaimer[allowed] = original;
+        _allow(original, allowed);
+    }
 
-        emit Allow(original, allowed);
+    /**
+     * Bulk allow
+     * @param original Address of the claimer.
+     * @param alloweds List of allowed address.
+     */
+    function allow(address original, address[] memory alloweds) external {
+        if (claimInfo[original].from != msg.sender) revert InvalidMinter();
+
+        for (uint256 i; i < alloweds.length; i++) {
+            _allow(original, alloweds[i]);
+        }
     }
 
     /**
@@ -153,6 +163,41 @@ contract SOAS is ERC20 {
         if (!success) revert TransferFailed();
 
         emit Renounce(originalClaimer[msg.sender], amount);
+    }
+
+    /**
+     * Bulk transfer
+     * @param tos List of receipient address.
+     * @param amounts List of amount.
+     */
+    function transfer(address[] memory tos, uint256[] memory amounts) public returns (bool) {
+        require(tos.length == amounts.length, "SOAS: bulk transfer args must be equals");
+        address owner = _msgSender();
+        for (uint256 i; i < tos.length; i++) {
+            _transfer(owner, tos[i], amounts[i]);
+        }
+        return true;
+    }
+
+    /**
+     * Bulk transferFrom
+     * @param froms List of sender address.
+     * @param tos List of receipient address.
+     * @param amounts List of amount.
+     */
+    function transferFrom(
+        address[] memory froms,
+        address[] memory tos,
+        uint256[] memory amounts
+    ) public returns (bool) {
+        require(
+            froms.length == tos.length && tos.length == amounts.length,
+            "SOAS: bulk transferFrom args must be equals"
+        );
+        for (uint256 i; i < froms.length; i++) {
+            transferFrom(froms[i], tos[i], amounts[i]);
+        }
+        return true;
     }
 
     /**
@@ -204,5 +249,16 @@ contract SOAS is ERC20 {
             }
         }
         return false;
+    }
+
+    /**
+     * Allow the transferable address for the claimer address.
+     */
+    function _allow(address original, address allowed) internal {
+        if (originalClaimer[allowed] != address(0)) revert AlreadyClaimer();
+
+        originalClaimer[allowed] = original;
+
+        emit Allow(original, allowed);
     }
 }

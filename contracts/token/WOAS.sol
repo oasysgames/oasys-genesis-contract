@@ -35,4 +35,39 @@ contract WOAS is ERC20 {
 
         emit Withdrawal(recipient, amount);
     }
+
+    /**
+     * Bulk transfer
+     * @param tos List of receipient address.
+     * @param amounts List of amount.
+     */
+    function transfer(address[] memory tos, uint256[] memory amounts) public virtual returns (bool) {
+        require(tos.length == amounts.length, "WOAS: bulk transfer args must be equals");
+        address owner = _msgSender();
+        for (uint256 i; i < tos.length; i++) {
+            _transfer(owner, tos[i], amounts[i]);
+        }
+        return true;
+    }
+
+    /**
+     * Bulk transferFrom
+     * @param froms List of sender address.
+     * @param tos List of receipient address.
+     * @param amounts List of amount.
+     */
+    function transferFrom(
+        address[] memory froms,
+        address[] memory tos,
+        uint256[] memory amounts
+    ) public virtual returns (bool) {
+        require(
+            froms.length == tos.length && tos.length == amounts.length,
+            "WOAS: bulk transferFrom args must be equals"
+        );
+        for (uint256 i; i < froms.length; i++) {
+            transferFrom(froms[i], tos[i], amounts[i]);
+        }
+        return true;
+    }
 }
