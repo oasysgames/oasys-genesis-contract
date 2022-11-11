@@ -130,6 +130,13 @@ contract StakeManager is IStakeManager, System {
         _;
     }
 
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function addRewardBalance() external payable {
+        emit AddedRewardBalance(msg.value);
+    }
+
     /****************************
      * Functions for Validators *
      ****************************/

@@ -14,6 +14,7 @@ interface IStakeManager {
      * Events *
      **********/
 
+    event AddedRewardBalance(uint256 amount);
     event ValidatorActivated(address indexed validator, uint256[] epochs);
     event ValidatorDeactivated(address indexed validator, uint256[] epochs);
     event ValidatorSlashed(address indexed validator);
@@ -63,6 +64,11 @@ interface IStakeManager {
         // Epoch of last claimed of rewards per validator
         mapping(address => uint256) lastClaimReward;
     }
+
+    /**
+     * Add reward balance.
+     */
+    function addRewardBalance() external payable;
 
     /****************************
      * Functions for Validators *

@@ -213,6 +213,20 @@ describe('StakeManager', () => {
     await expect(initialize()).to.revertedWith('AlreadyInitialized()')
   })
 
+  it('addRewardBalance()', async () => {
+    const check = async (exp: string) => {
+      const actual = await stakeManager.provider.getBalance(stakeManager.address)
+      expect(fromWei(actual.toString())).to.equal(exp)
+    }
+
+    await check('0')
+
+    const tx = await stakeManager.addRewardBalance({ value: toWei('1') })
+    await check('1')
+
+    await expect(tx).to.emit(stakeManager, 'AddedRewardBalance').withArgs(toWei('1'))
+  })
+
   describe('validator owner or operator functions', () => {
     let validator: Validator
     let owner: Account
