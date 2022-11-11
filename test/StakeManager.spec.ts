@@ -14,6 +14,7 @@ import {
   WOASAddress,
   SOASAddress,
   TestERC20Bytecode,
+  toBNWei,
 } from './helpers'
 
 const initialEnv: EnvironmentValue = {
@@ -256,7 +257,9 @@ describe('StakeManager', () => {
       tx = validator.joinValidator(owner.address)
       await expect(tx).to.revertedWith('SameAsOwner()')
 
-      await validator.joinValidator()
+      await expect(await validator.joinValidator())
+        .to.emit(stakeManager, 'ValidatorJoined')
+        .withArgs(validator.owner.address)
 
       tx = validator.joinValidator()
       await expect(tx).to.revertedWith('AlreadyJoined()')
@@ -275,7 +278,9 @@ describe('StakeManager', () => {
       await expect(tx).to.revertedWith('SameAsOwner()')
 
       // from owner
-      await validator.updateOperator(newOperator.address)
+      await expect(await validator.updateOperator(newOperator.address))
+        .to.emit(stakeManager, 'OperatorUpdated')
+        .withArgs(validator.owner.address, validator.operator.address, newOperator.address)
       expect((await validator.getInfo()).operator).to.equal(newOperator.address)
 
       // from operator
@@ -414,7 +419,9 @@ describe('StakeManager', () => {
       await toNextEpoch()
 
       // from owner
-      await validator.claimCommissions(owner)
+      await expect(await validator.claimCommissions(owner))
+        .to.emit(stakeManager, 'ClaimedCommissions')
+        .withArgs(validator.owner.address, toBNWei('0.005707762557077625'))
       await expectBalance(stakeManager, '499.994292237442922375', '250', '250')
       await expectBalance(validator.owner, '10000.005707762557077625', '0', '0')
 
@@ -955,7 +962,9 @@ describe('StakeManager', () => {
       await staker2.expectRewards('0.17408675', validator1, 99)
       await validator1.expectCommissions('0.21347031', 99)
 
-      await staker1.claimRewards(validator1, 5)
+      await expect(await staker1.claimRewards(validator1, 5))
+        .to.emit(stakeManager, 'ClaimedRewards')
+        .withArgs(staker1.address, validator1.owner.address, toBNWei('0.069063926940639267'))
       await staker2.claimRewards(validator1, 5)
       await validator1.claimCommissions(undefined, 5)
 

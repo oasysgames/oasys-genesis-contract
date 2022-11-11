@@ -76,12 +76,13 @@ library Staker {
         IEnvironment environment,
         IStakeManager.Validator storage validator,
         uint256 epochs
-    ) internal {
+    ) internal returns (uint256) {
         (uint256 rewards, uint256 lastClaim) = getRewards(staker, environment, validator, epochs);
         staker.lastClaimReward[validator.owner] = lastClaim;
         if (rewards > 0) {
             Token.transfers(Token.Type.OAS, staker.signer, rewards);
         }
+        return rewards;
     }
 
     function claimUnstakes(IStakeManager.Staker storage staker, IEnvironment environment) internal {

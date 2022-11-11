@@ -15,12 +15,16 @@ interface IStakeManager {
      **********/
 
     event AddedRewardBalance(uint256 amount);
+    event ValidatorJoined(address validator);
     event ValidatorActivated(address indexed validator, uint256[] epochs);
     event ValidatorDeactivated(address indexed validator, uint256[] epochs);
     event ValidatorSlashed(address indexed validator);
     event ValidatorJailed(address indexed validator, uint256 until);
+    event OperatorUpdated(address indexed validator, address oldOperator, address newOperator);
     event Staked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
     event Unstaked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
+    event ClaimedCommissions(address indexed validator, uint256 amount);
+    event ClaimedRewards(address indexed staker, address validator, uint256 amount);
 
     /***********
      * Structs *
