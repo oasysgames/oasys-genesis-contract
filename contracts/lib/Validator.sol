@@ -86,12 +86,13 @@ library Validator {
         IStakeManager.Validator storage validator,
         IEnvironment environment,
         uint256 epochs
-    ) internal {
+    ) internal returns (uint256) {
         (uint256 commissions, uint256 lastClaim) = getCommissions(validator, environment, epochs);
         validator.lastClaimCommission = lastClaim;
         if (commissions > 0) {
             Token.transfers(Token.Type.OAS, validator.owner, commissions);
         }
+        return commissions;
     }
 
     function slash(

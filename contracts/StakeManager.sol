@@ -130,6 +130,13 @@ contract StakeManager is IStakeManager, System {
         _;
     }
 
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function addRewardBalance() external payable {
+        emit AddedRewardBalance(msg.value);
+    }
+
     /****************************
      * Functions for Validators *
      ****************************/
@@ -162,21 +169,31 @@ contract StakeManager is IStakeManager, System {
      * @inheritdoc IStakeManager
      */
     function joinValidator(address operator) external {
-        if (!allowlist.containsAddress(msg.sender)) {
+        address owner = msg.sender;
+        if (!allowlist.containsAddress(owner)) {
             revert UnauthorizedValidator();
         }
 
-        validators[msg.sender].join(operator);
-        validatorOwners.push(msg.sender);
-        operatorToOwner[operator] = msg.sender;
+        validators[owner].join(operator);
+        validatorOwners.push(owner);
+        operatorToOwner[operator] = owner;
+
+        emit ValidatorJoined(owner);
     }
 
     /**
      * @inheritdoc IStakeManager
      */
     function updateOperator(address operator) external validatorExists(msg.sender) {
-        validators[msg.sender].updateOperator(operator);
-        operatorToOwner[operator] = msg.sender;
+        address owner = msg.sender;
+
+        Validator storage validator = validators[owner];
+        address oldOperator = validator.operator;
+
+        validator.updateOperator(operator);
+        operatorToOwner[operator] = owner;
+
+        emit OperatorUpdated(owner, oldOperator, operator);
     }
 
     /**
@@ -209,7 +226,8 @@ contract StakeManager is IStakeManager, System {
      * @inheritdoc IStakeManager
      */
     function claimCommissions(address validator, uint256 epochs) external validatorExists(validator) {
-        validators[validator].claimCommissions(environment, epochs);
+        uint256 amount = validators[validator].claimCommissions(environment, epochs);
+        emit ClaimedCommissions(validator, amount);
     }
 
     /************************
@@ -269,7 +287,8 @@ contract StakeManager is IStakeManager, System {
         address validator,
         uint256 epochs
     ) external validatorExists(validator) stakerExists(staker) {
-        stakers[staker].claimRewards(environment, validators[validator], epochs);
+        uint256 amount = stakers[staker].claimRewards(environment, validators[validator], epochs);
+        emit ClaimedRewards(staker, validator, amount);
     }
 
     /******************
