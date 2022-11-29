@@ -132,7 +132,7 @@ describe('StakeManager', () => {
     await mining(currentBlock)
   }
 
-  const getEpoch = async (incr: number) => {
+  const getEpoch = async (incr: number): Promise<number> => {
     return (await environment.epoch()).toNumber() + incr
   }
 
@@ -550,7 +550,7 @@ describe('StakeManager', () => {
       )
     })
 
-    it('unstake() and claimUnstakes()', async () => {
+    xit('[OBSOLETED] unstake() and claimUnstakes()', async () => {
       await expectBalance(stakeManager, '500', '0', '0')
       await expectBalance(staker1.signer, '8000', '1000', '1000')
       await staker1.expectTotalStake('0', '0', '0')
@@ -868,6 +868,228 @@ describe('StakeManager', () => {
         ],
       )
     })
+
+    it('unstakeV2() and claimLockedUnstake()', async () => {
+      await expectBalance(stakeManager, '500', '0', '0')
+      await expectBalance(staker1.signer, '8000', '1000', '1000')
+      await staker1.expectTotalStake('0', '0', '0')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+        ],
+      )
+
+      await staker1.stake(Token.OAS, validator1, '5')
+      await staker1.stake(Token.wOAS, validator1, '5')
+      await staker1.stake(Token.OAS, validator2, '10')
+      await staker1.stake(Token.sOAS, validator2, '10')
+
+      await toNextEpoch()
+
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('15', '5', '10')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['5', '10', '0', '0', '0'],
+          ['5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
+      )
+
+      const tx1 = await staker1.unstakeV2(Token.OAS, validator1, '2.5')
+      const tx2 = await staker1.unstakeV2(Token.wOAS, validator1, '2.5')
+      await expect(tx1).to.emit(stakeManager, 'UnstakedV2').withArgs(staker1.address, validator1.owner.address, 0)
+      await expect(tx2).to.emit(stakeManager, 'UnstakedV2').withArgs(staker1.address, validator1.owner.address, 1)
+      await expect(staker1.unstakeV2(Token.sOAS, validator1, '1')).to.revertedWith('NoAmount')
+
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('15', '5', '10')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['5', '10', '0', '0', '0'],
+          ['5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
+      )
+
+      await toNextEpoch()
+
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('12.5', '2.5', '10')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['2.5', '10', '0', '0', '0'],
+          ['2.5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
+      )
+
+      await staker1.unstakeV2(Token.OAS, validator1, '1')
+      await staker1.unstakeV2(Token.OAS, validator1, '1')
+      await staker1.unstakeV2(Token.wOAS, validator1, '1')
+      await staker1.unstakeV2(Token.wOAS, validator1, '1')
+
+      expect(await staker1.getLockedUnstakeCount()).to.equal(6)
+
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('12.5', '2.5', '10')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['2.5', '10', '0', '0', '0'],
+          ['2.5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
+      )
+
+      await toNextEpoch()
+
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('10.5', '0.5', '10')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0.5', '10', '0', '0', '0'],
+          ['0.5', '0', '0', '0', '0'],
+          ['0', '10', '0', '0', '0'],
+        ],
+      )
+
+      await staker1.unstakeV2(Token.OAS, validator1, '9999')
+      await staker1.unstakeV2(Token.wOAS, validator1, '9999')
+      await staker1.unstakeV2(Token.OAS, validator2, '5')
+      await staker1.unstakeV2(Token.sOAS, validator2, '5')
+
+      expect(await staker1.getLockedUnstakeCount()).to.equal(10)
+
+      await toNextEpoch()
+
+      await expectBalance(stakeManager, '515', '5', '10')
+      await expectBalance(staker1.signer, '7985', '995', '990')
+      await staker1.expectTotalStake('5', '0', '5')
+      await staker1.expectStakes(
+        0,
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        [
+          ['0', '5', '0', '0', '0'],
+          ['0', '0', '0', '0', '0'],
+          ['0', '5', '0', '0', '0'],
+        ],
+      )
+
+      const block = await ethers.provider.getBlock('latest')
+      const length = (await staker1.getLockedUnstakeCount()).toNumber()
+
+      await network.provider.send('evm_setNextBlockTimestamp', [block.timestamp + 863000])
+      await network.provider.send('evm_mine')
+
+      await expect(staker1.claimLockedUnstake(length - 1)).to.revertedWith('Locked')
+
+      await network.provider.send('evm_setNextBlockTimestamp', [block.timestamp + 864000])
+      await network.provider.send('evm_mine')
+
+      const stakeManagerBalances: { [t: number]: BigNumber } = {
+        0: toBNWei('515'),
+        1: toBNWei('5'),
+        2: toBNWei('10'),
+      }
+      const stakerBalances: { [t: number]: BigNumber } = {
+        0: toBNWei('7985'),
+        1: toBNWei('995'),
+        2: toBNWei('990'),
+      }
+
+      for (let i = 0; i < length; i++) {
+        const tx = await staker1.claimLockedUnstake(i)
+        await expect(tx).to.emit(stakeManager, 'ClaimedLockedUnstake').withArgs(staker1.address, i)
+
+        const req = await staker1.getLockedUnstake(i)
+        expect(req.amount).to.gt(0)
+
+        stakeManagerBalances[req.token] = stakeManagerBalances[req.token].sub(req.amount)
+        stakerBalances[req.token] = stakerBalances[req.token].add(req.amount)
+
+        await expectBalance(
+          stakeManager,
+          fromWei(stakeManagerBalances[0].toString()),
+          fromWei(stakeManagerBalances[1].toString()),
+          fromWei(stakeManagerBalances[2].toString()),
+        )
+        await expectBalance(
+          staker1.signer,
+          fromWei(stakerBalances[0].toString()),
+          fromWei(stakerBalances[1].toString()),
+          fromWei(stakerBalances[2].toString()),
+        )
+        await staker1.expectTotalStake('5', '0', '5')
+        await staker1.expectStakes(
+          0,
+          [validator1, validator2, validator3, validator4, fixedValidator],
+          [
+            ['0', '5', '0', '0', '0'],
+            ['0', '0', '0', '0', '0'],
+            ['0', '5', '0', '0', '0'],
+          ],
+        )
+      }
+
+      // check for double claim
+      for (let i = 0; i < length; i++) {
+        await expect(staker1.claimLockedUnstake(i)).to.revertedWith('AlreadyClaimed')
+      }
+    })
+
+    it('restakeRewards()', async () => {
+      await expectBalance(stakeManager, '500', '0', '0')
+      await expectBalance(staker1.signer, '8000', '1000', '1000')
+      await staker1.expectTotalStake('0', '0', '0')
+
+      await staker1.stake(Token.wOAS, validator1, '1000')
+      await toNextEpoch()
+
+      await expectBalance(stakeManager, '500', '1000', '0')
+      await expectBalance(staker1.signer, '8000', '0', '1000')
+      await staker1.expectTotalStake('0', '1000', '0')
+
+      await expect(staker1.restakeRewards(validator1)).to.revertedWith('NoAmount')
+
+      await toNextEpoch()
+
+      const tx = await staker1.restakeRewards(validator1)
+      await expect(tx)
+        .to.emit(stakeManager, 'ReStaked')
+        .withArgs(staker1.address, validator1.owner.address, '11415525114155251')
+
+      await expectBalance(stakeManager, '500', '1000', '0')
+      await expectBalance(staker1.signer, '8000', '0', '1000')
+      await staker1.expectTotalStake('0.0114155', '1000', '0')
+
+      await toNextEpoch()
+      await toNextEpoch()
+      await toNextEpoch()
+      await staker1.restakeRewards(validator1)
+
+      await expectBalance(stakeManager, '500', '1000', '0')
+      await expectBalance(staker1.signer, '8000', '0', '1000')
+      await staker1.expectTotalStake('0.045662', '1000', '0')
+    })
   })
 
   describe('rewards and commissions', () => {
@@ -906,10 +1128,10 @@ describe('StakeManager', () => {
       await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 100 })
       await toNextEpoch() // 8
       await toNextEpoch() // 9
-      await staker1.unstake(Token.OAS, validator1, '500')
-      await staker1.unstake(Token.wOAS, validator1, '500')
-      await staker2.unstake(Token.OAS, validator1, '500')
-      await staker2.unstake(Token.sOAS, validator1, '500')
+      await staker1.unstakeV2(Token.OAS, validator1, '500')
+      await staker1.unstakeV2(Token.wOAS, validator1, '500')
+      await staker2.unstakeV2(Token.OAS, validator1, '500')
+      await staker2.unstakeV2(Token.sOAS, validator1, '500')
       await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
       await toNextEpoch() // 10
       await updateEnvironment({ startEpoch: startingEpoch + 12, rewardRate: 50 })
@@ -1462,8 +1684,8 @@ describe('StakeManager', () => {
       await checker(true, false, true, '750', 4)
       await checker(true, false, true, '750', 5)
 
-      await staker1.unstake(Token.OAS, validator1, '200')
-      await staker2.unstake(Token.OAS, validator1, '100')
+      await staker1.unstakeV2(Token.OAS, validator1, '200')
+      await staker2.unstakeV2(Token.OAS, validator1, '100')
 
       await checker(true, false, true, '750') // epoch 3
       await checker(true, false, false, '0', 1)
@@ -1633,7 +1855,7 @@ describe('StakeManager', () => {
       await checker(true, false, true, '500', 12)
     })
 
-    it('getUnstakes()', async () => {
+    xit('[OBSOLETED] getUnstakes()', async () => {
       const check = async (expOAS: number, expWOAS: number, expSOAS: number) => {
         const acutal = await staker1.getUnstakes()
         expect(fromWei(acutal.oasUnstakes.toString())).to.eql('' + expOAS)
@@ -1669,6 +1891,65 @@ describe('StakeManager', () => {
       await check(0, 0, 0)
     })
 
+    it('getLockedUnstakeCount()', async () => {
+      await staker1.stake(Token.OAS, validator1, '10')
+      expect(await staker1.getLockedUnstakeCount()).to.equal(0)
+
+      await staker1.unstakeV2(0, validator1, '1')
+      await staker1.unstakeV2(0, validator1, '1')
+      await staker1.unstakeV2(0, validator1, '1')
+      expect(await staker1.getLockedUnstakeCount()).to.equal(3)
+    })
+
+    it('getLockedUnstake()', async () => {
+      const expectRequest = async (
+        staker: Staker,
+        requestIndex: number,
+        expToken: number,
+        expAmount: string,
+        expUnlockTime: number,
+      ) => {
+        const actual = await staker.getLockedUnstake(requestIndex)
+        expect(actual.token).to.equal(expToken)
+        expect(fromWei(actual.amount.toString())).to.equal(expAmount)
+        expect(actual.unlockTime).to.equal(expUnlockTime)
+      }
+
+      const calcBlockTime = async (tx: any, add: number) => {
+        const block = await ethers.provider.getBlock(tx.blockNumber)
+        return block.timestamp + add
+      }
+
+      await staker1.stake(Token.OAS, validator1, '10')
+      await staker1.stake(Token.wOAS, validator1, '10')
+
+      const tx1 = await staker1.unstakeV2(0, validator1, '1')
+      const tx2 = await staker1.unstakeV2(1, validator1, '2')
+
+      await expectRequest(staker1, 0, Token.OAS, '1', await calcBlockTime(tx1, 864000))
+      await expectRequest(staker1, 1, Token.wOAS, '2', await calcBlockTime(tx2, 864000))
+    })
+
+    it('getLockedUnstakes()', async () => {
+      await staker1.stake(Token.OAS, validator1, '1275')
+
+      for (let i = 1; i <= 50; i++) {
+        await staker1.unstakeV2(0, validator1, String(i))
+      }
+
+      for (const cursor of [0, 10, 20, 30, 40]) {
+        const actual = await staker1.getLockedUnstakes(cursor, 10)
+        expect(actual.unstakes.map((x) => x.amount)).to.eql(
+          [...Array(10).keys()].map((x) => toBNWei(String(x + cursor + 1))),
+        )
+        expect(actual.newCursor).to.equal(cursor + 10)
+      }
+
+      const actual = await staker1.getLockedUnstakes(50, 10)
+      expect(actual.unstakes).to.eql([])
+      expect(actual.newCursor).to.equal(50)
+    })
+
     it('getValidatorStakes()', async () => {
       await staker1.stake(Token.OAS, validator1, '10')
       await toNextEpoch()
@@ -1685,7 +1966,7 @@ describe('StakeManager', () => {
       await staker6.stake(Token.OAS, validator1, '60')
       await toNextEpoch()
 
-      await staker2.unstake(Token.OAS, validator1, '20')
+      await staker2.unstakeV2(Token.OAS, validator1, '20')
       await toNextEpoch()
 
       await validator1.expectStakes(
@@ -1779,14 +2060,12 @@ describe('StakeManager', () => {
         ],
       )
 
-      await staker1.unstake(Token.OAS, validator1, '1')
-      await staker1.unstake(Token.OAS, validator1, '1')
-      await staker1.unstake(Token.wOAS, validator1, '1')
-      await staker1.unstake(Token.sOAS, validator1, '1')
-      await staker1.unstake(Token.OAS, validator2, '2')
-      await staker1.unstake(Token.wOAS, validator2, '1')
-      await staker1.unstake(Token.OAS, validator4, '3')
-      await staker1.unstake(Token.sOAS, validator4, '1')
+      await staker1.unstakeV2(Token.OAS, validator1, '1')
+      await staker1.unstakeV2(Token.OAS, validator1, '1')
+      await staker1.unstakeV2(Token.OAS, validator2, '2')
+      await staker1.unstakeV2(Token.wOAS, validator2, '1')
+      await staker1.unstakeV2(Token.OAS, validator4, '3')
+      await staker1.unstakeV2(Token.sOAS, validator4, '1')
 
       await staker1.expectStakes(
         0,
@@ -1816,9 +2095,9 @@ describe('StakeManager', () => {
       await staker1.stake(Token.OAS, validator1, '10')
       await staker1.stake(Token.wOAS, validator2, '20')
       await staker1.stake(Token.sOAS, validator4, '30')
-      await staker1.unstake(Token.OAS, validator1, '10')
-      await staker1.unstake(Token.wOAS, validator2, '20')
-      await staker1.unstake(Token.sOAS, validator4, '30')
+      await staker1.unstakeV2(Token.OAS, validator1, '10')
+      await staker1.unstakeV2(Token.wOAS, validator2, '20')
+      await staker1.unstakeV2(Token.sOAS, validator4, '30')
 
       await staker1.expectStakes(
         0,
@@ -1846,9 +2125,9 @@ describe('StakeManager', () => {
       await staker1.stake(Token.wOAS, validator2, '20')
       await staker1.stake(Token.sOAS, validator4, '30')
 
-      await staker1.unstake(Token.OAS, validator1, '5')
-      await staker1.unstake(Token.wOAS, validator2, '10')
-      await staker1.unstake(Token.sOAS, validator4, '15')
+      await staker1.unstakeV2(Token.OAS, validator1, '5')
+      await staker1.unstakeV2(Token.wOAS, validator2, '10')
+      await staker1.unstakeV2(Token.sOAS, validator4, '15')
 
       await staker1.expectStakes(
         0,
@@ -2036,7 +2315,7 @@ describe('StakeManager', () => {
       await checker(0, '530')
       await checker(4, '530')
 
-      await staker1.unstake(Token.OAS, validator1, '1')
+      await staker1.unstakeV2(Token.OAS, validator1, '1')
 
       await checker(0, '530')
       await checker(4, '529')
@@ -2046,7 +2325,7 @@ describe('StakeManager', () => {
       await checker(0, '529')
       await checker(5, '529')
 
-      await staker1.unstake(Token.OAS, validator1, '2')
+      await staker1.unstakeV2(Token.OAS, validator1, '2')
 
       await checker(0, '529')
       await checker(5, '527')
@@ -2061,7 +2340,7 @@ describe('StakeManager', () => {
       await checker(0, '527')
       await checker(6, '557')
 
-      await staker1.unstake(Token.OAS, validator1, '3')
+      await staker1.unstakeV2(Token.OAS, validator1, '3')
 
       await checker(0, '527')
       await checker(6, '554')
@@ -2093,8 +2372,8 @@ describe('StakeManager', () => {
       await toNextEpoch() // 3
       await toNextEpoch() // 4
 
-      await staker1.unstake(Token.OAS, validator1, '250')
-      await staker2.unstake(Token.OAS, validator2, '250')
+      await staker1.unstakeV2(Token.OAS, validator1, '250')
+      await staker2.unstakeV2(Token.OAS, validator2, '250')
 
       await toNextEpoch() // 5
       await toNextEpoch() // 6

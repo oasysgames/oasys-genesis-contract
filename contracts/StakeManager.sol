@@ -35,6 +35,12 @@ error UnauthorizedValidator();
 // Amount or msg.value is zero.
 error NoAmount();
 
+error Locked();
+
+error AlreadyClaimed();
+
+error ObsoletedMethod();
+
 /**
  * @title StakeManager
  * @dev The StakeManager contract is the core contract of the proof-of-stake.
@@ -263,20 +269,50 @@ contract StakeManager is IStakeManager, System {
         address validator,
         Token.Type token,
         uint256 amount
-    ) external validatorExists(validator) stakerExists(msg.sender) onlyNotLastBlock {
-        if (amount == 0) revert NoAmount();
-
-        stakeUpdates.sub(stakeAmounts, environment.epoch() + 1, amount);
-
-        amount = stakers[msg.sender].unstake(environment, validators[validator], token, amount);
-        emit Unstaked(msg.sender, validator, token, amount);
+    ) external {
+        revert ObsoletedMethod();
     }
 
     /**
      * @inheritdoc IStakeManager
      */
-    function claimUnstakes(address staker) external stakerExists(staker) {
-        stakers[staker].claimUnstakes(environment);
+    function unstakeV2(
+        address validator,
+        Token.Type token,
+        uint256 amount
+    ) external validatorExists(validator) stakerExists(msg.sender) onlyNotLastBlock {
+        Staker storage _staker = stakers[msg.sender];
+
+        amount = _staker.unstake(environment, validators[validator], token, amount);
+        if (amount == 0) revert NoAmount();
+
+        _staker.lockedUnstakes.push(LockedUnstake(token, amount, block.timestamp + 10 days));
+        stakeUpdates.sub(stakeAmounts, environment.epoch() + 1, amount);
+
+        emit UnstakedV2(msg.sender, validator, _staker.lockedUnstakes.length - 1);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function claimUnstakes(address staker) external stakerExists(msg.sender) {
+        stakers[msg.sender].claimUnstakes(environment);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function claimLockedUnstake(uint256 lockedUnstake) external stakerExists(msg.sender) {
+        LockedUnstake storage request = stakers[msg.sender].lockedUnstakes[lockedUnstake];
+
+        uint256 unlockTime = request.unlockTime;
+        if (block.timestamp < unlockTime) revert Locked();
+        if (unlockTime == 0) revert AlreadyClaimed();
+
+        request.unlockTime = 0;
+        Token.transfers(request.token, msg.sender, request.amount);
+
+        emit ClaimedLockedUnstake(msg.sender, lockedUnstake);
     }
 
     /**
@@ -422,6 +458,44 @@ contract StakeManager is IStakeManager, System {
         soasUnstakes = _staker.getUnstakes(environment, Token.Type.sOAS);
 
         return (oasUnstakes, woasUnstakes, soasUnstakes);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function getLockedUnstakeCount(address staker) external view returns (uint256 count) {
+        return stakers[staker].lockedUnstakes.length;
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function getLockedUnstake(address staker, uint256 lockedUnstake)
+        external
+        view
+        returns (LockedUnstake memory _unstake)
+    {
+        return stakers[staker].lockedUnstakes[lockedUnstake];
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function getLockedUnstakes(
+        address staker,
+        uint256 cursor,
+        uint256 howMany
+    ) external view returns (LockedUnstake[] memory unstakes, uint256 newCursor) {
+        Staker storage _staker = stakers[staker];
+
+        (howMany, newCursor) = _pagination(cursor, howMany, _staker.lockedUnstakes.length);
+        unstakes = new LockedUnstake[](howMany);
+
+        for (uint256 i = 0; i < howMany; i++) {
+            unstakes[i] = _staker.lockedUnstakes[cursor + i];
+        }
+
+        return (unstakes, newCursor);
     }
 
     /**

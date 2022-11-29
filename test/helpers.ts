@@ -32,6 +32,12 @@ interface StakerInfo {
   unstakes: BigNumber
 }
 
+interface LockedUnstake {
+  token: number
+  amount: BigNumber
+  unlockTime: BigNumber
+}
+
 const gasPrice = 0
 
 class Validator {
@@ -51,6 +57,10 @@ class Validator {
     return this._contract
       .connect(sender || this.owner)
       .unstake(validator.owner.address, token, toWei(amount), { gasPrice })
+  }
+
+  unstakeV2(token: number, validator: Validator, amount: string) {
+    return this._contract.connect(this.owner).unstakeV2(validator.owner.address, token, toWei(amount), { gasPrice })
   }
 
   joinValidator(operator?: string) {
@@ -143,6 +153,10 @@ class Staker {
     return this.contract.unstake(validator.owner.address, token, toWei(amount), { gasPrice })
   }
 
+  unstakeV2(token: number, validator: Validator, amount: string) {
+    return this.contract.unstakeV2(validator.owner.address, token, toWei(amount), { gasPrice })
+  }
+
   claimRewards(validator: Validator, epochs: number, sender?: Account) {
     return this._contract
       .connect(sender ?? this.signer)
@@ -153,16 +167,30 @@ class Staker {
     return this._contract.connect(sender ?? this.signer).claimUnstakes(this.address, { gasPrice })
   }
 
-  async getStakes(
-    epoch?: number,
-    cursor = 0,
-    howMany = 100,
-  ): Promise<{ oasStakes: BigNumber[]; woasStakes: BigNumber[]; soasStakes: BigNumber[]; newCursor: BigNumber }> {
-    return await this._contract.getStakerStakes(this.signer.address, epoch ?? 0, cursor, howMany)
+  claimLockedUnstake(lockedUnstake: number) {
+    return this._contract.connect(this.signer).claimLockedUnstake(lockedUnstake, { gasPrice })
   }
 
   async getUnstakes(): Promise<{ oasUnstakes: BigNumber; woasUnstakes: BigNumber; soasUnstakes: BigNumber }> {
     return await this._contract.getUnstakes(this.signer.address)
+  }
+
+  async getLockedUnstakeCount(): Promise<BigNumber> {
+    return await this._contract.getLockedUnstakeCount(this.signer.address)
+  }
+
+  async getLockedUnstake(lockedUnstake: number): Promise<LockedUnstake> {
+    return await this._contract.getLockedUnstake(this.signer.address, lockedUnstake)
+  }
+
+  async getLockedUnstakes(
+    cursor = 0,
+    howMany = 100,
+  ): Promise<{
+    unstakes: LockedUnstake[]
+    newCursor: number
+  }> {
+    return await this._contract.getLockedUnstakes(this.signer.address, cursor, howMany)
   }
 
   async expectRewards(expectEther: string, validator: Validator, epochs?: number) {

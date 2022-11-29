@@ -23,8 +23,10 @@ interface IStakeManager {
     event OperatorUpdated(address indexed validator, address oldOperator, address newOperator);
     event Staked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
     event Unstaked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
+    event UnstakedV2(address indexed staker, address indexed validator, uint256 lockedUnstake);
     event ClaimedCommissions(address indexed validator, uint256 amount);
     event ClaimedRewards(address indexed staker, address validator, uint256 amount);
+    event ClaimedLockedUnstake(address indexed staker, uint256 lockedUnstake);
 
     /***********
      * Structs *
@@ -67,6 +69,14 @@ interface IStakeManager {
         mapping(Token.Type => uint256[]) unstakeAmounts;
         // Epoch of last claimed of rewards per validator
         mapping(address => uint256) lastClaimReward;
+        // List of locked unstakes
+        LockedUnstake[] lockedUnstakes;
+    }
+
+    struct LockedUnstake {
+        Token.Type token;
+        uint256 amount;
+        uint256 unlockTime;
     }
 
     /**
@@ -152,7 +162,7 @@ interface IStakeManager {
     ) external payable;
 
     /**
-     * Unstake tokens from validator.
+     * [OBSOLETED] Unstake tokens from validator.
      * The stake will be locked until the end of the current epoch, but will be rewarded.
      * @param validator Validator address.
      * @param token Type of token.
@@ -165,10 +175,29 @@ interface IStakeManager {
     ) external;
 
     /**
+     * Unstake tokens from validator. The unstaked token will be locked about 10 days.
+     * Rewards for the current epoch will be granted.
+     * @param validator Validator address.
+     * @param token Type of token.
+     * @param amount Unstake amounts.
+     */
+    function unstakeV2(
+        address validator,
+        Token.Type token,
+        uint256 amount
+    ) external;
+
+    /**
      * Withdraw unstaked tokens whose lock period has expired.
-     * @param staker Staker address.
+     * @param staker [UNUSED] Staker address.
      */
     function claimUnstakes(address staker) external;
+
+    /**
+     * Withdraw unstaked token whose lock period has expired.
+     * @param lockedUnstake The index of unstake request.
+     */
+    function claimLockedUnstake(uint256 lockedUnstake) external;
 
     /**
      * Withdraw staking rewards.
@@ -284,6 +313,38 @@ interface IStakeManager {
             uint256 woasUnstakes,
             uint256 soasUnstakes
         );
+
+    /**
+     * Returns number of locked unstakes.
+     * @param staker Staker address.
+     * @return count Number of locked unstakes.
+     */
+    function getLockedUnstakeCount(address staker) external returns (uint256 count);
+
+    /**
+     * Returns specific locked unstake.
+     * @param staker Staker address.
+     * @param lockedUnstake The index of unstake request.
+     * @return _unstake Locked unstake.
+     */
+    function getLockedUnstake(address staker, uint256 lockedUnstake)
+        external
+        view
+        returns (LockedUnstake memory _unstake);
+
+    /**
+     * Returns list of locked unstakes.
+     * @param staker Staker address.
+     * @param cursor The index of the first item being requested.
+     * @param howMany Indicates how many items should be returned.
+     * @return unstakes List of locked unstakes.
+     * @return newCursor Cursor that should be used in the next request.
+     */
+    function getLockedUnstakes(
+        address staker,
+        uint256 cursor,
+        uint256 howMany
+    ) external view returns (LockedUnstake[] memory unstakes, uint256 newCursor);
 
     /**
      * Returns the balance of staking rewards.
