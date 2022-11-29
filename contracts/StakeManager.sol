@@ -231,9 +231,28 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function claimCommissions(address validator, uint256 epochs) external validatorExists(validator) {
-        uint256 amount = validators[validator].claimCommissions(environment, epochs);
-        emit ClaimedCommissions(validator, amount);
+    function claimCommissions(address validator, uint256 epochs) external validatorExists(msg.sender) {
+        uint256 amount = validators[msg.sender].claimCommissions(environment, epochs);
+        if (amount > 0) {
+            Token.transfers(Token.Type.OAS, msg.sender, amount);
+        }
+        emit ClaimedCommissions(msg.sender, amount);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function restakeCommissions(uint256 epochs)
+        external
+        validatorExists(msg.sender)
+        stakerExists(msg.sender)
+        onlyNotLastBlock
+    {
+        uint256 amount = validators[msg.sender].claimCommissions(environment, epochs);
+        if (amount == 0) revert NoAmount();
+
+        _stake(msg.sender, msg.sender, environment.epoch(), Token.Type.OAS, amount);
+        emit ReStaked(msg.sender, msg.sender, amount);
     }
 
     /************************
@@ -249,16 +268,9 @@ contract StakeManager is IStakeManager, System {
         uint256 amount
     ) external payable validatorExists(validator) onlyNotLastBlock {
         if (amount == 0) revert NoAmount();
-
-        stakeUpdates.add(stakeAmounts, environment.epoch() + 1, amount);
-
         Token.receives(token, msg.sender, amount);
-        Staker storage staker = stakers[msg.sender];
-        if (staker.signer == address(0)) {
-            staker.signer = msg.sender;
-            stakerSigners.push(msg.sender);
-        }
-        staker.stake(environment, validators[validator], token, amount);
+
+        _stake(msg.sender, validator, environment.epoch() + 1, token, amount);
         emit Staked(msg.sender, validator, token, amount);
     }
 
@@ -322,9 +334,28 @@ contract StakeManager is IStakeManager, System {
         address staker,
         address validator,
         uint256 epochs
-    ) external validatorExists(validator) stakerExists(staker) {
-        uint256 amount = stakers[staker].claimRewards(environment, validators[validator], epochs);
-        emit ClaimedRewards(staker, validator, amount);
+    ) external validatorExists(validator) stakerExists(msg.sender) {
+        uint256 amount = stakers[msg.sender].claimRewards(environment, validators[validator], epochs);
+        if (amount > 0) {
+            Token.transfers(Token.Type.OAS, msg.sender, amount);
+        }
+        emit ClaimedRewards(msg.sender, validator, amount);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function restakeRewards(address validator, uint256 epochs)
+        external
+        validatorExists(validator)
+        stakerExists(msg.sender)
+        onlyNotLastBlock
+    {
+        uint256 amount = stakers[msg.sender].claimRewards(environment, validators[validator], epochs);
+        if (amount == 0) revert NoAmount();
+
+        _stake(msg.sender, validator, environment.epoch(), Token.Type.OAS, amount);
+        emit ReStaked(msg.sender, validator, amount);
     }
 
     /******************
@@ -635,5 +666,22 @@ contract StakeManager is IStakeManager, System {
             howMany = length - cursor;
         }
         return (howMany, cursor + howMany);
+    }
+
+    function _stake(
+        address staker,
+        address validator,
+        uint256 epoch,
+        Token.Type token,
+        uint256 amount
+    ) internal {
+        Staker storage _staker = stakers[staker];
+        if (_staker.signer == address(0)) {
+            _staker.signer = staker;
+            stakerSigners.push(staker);
+        }
+        _staker.stake(epoch, validators[validator], token, amount);
+
+        stakeUpdates.add(stakeAmounts, epoch, amount);
     }
 }

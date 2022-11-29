@@ -22,6 +22,7 @@ interface IStakeManager {
     event ValidatorJailed(address indexed validator, uint256 until);
     event OperatorUpdated(address indexed validator, address oldOperator, address newOperator);
     event Staked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
+    event ReStaked(address indexed staker, address indexed validator, uint256 amount);
     event Unstaked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
     event UnstakedV2(address indexed staker, address indexed validator, uint256 lockedUnstake);
     event ClaimedCommissions(address indexed validator, uint256 amount);
@@ -136,13 +137,21 @@ interface IStakeManager {
 
     /**
      * Withdraw validator commissions.
-     * Both owner and operator can be executed, but the remittance destination will be owner address.
-     * @param validator Validator address.
+     * @param validator [UNUSED] Validator address.
      * @param epochs Number of epochs to be withdrawn.
      *     If zero is specified, all commissions from the last withdrawal to the present will be withdrawn.
      *     If the gas limit is reached, specify a smaller value.
      */
     function claimCommissions(address validator, uint256 epochs) external;
+
+    /**
+     * Stake commissions to yourself.
+     * The stakes will be effective from current epoch and rewards will be granted.
+     * @param epochs Number of epochs to be stake.
+     *     If zero is specified, all commissions from the last withdrawal to the present are staked.
+     *     If the gas limit is reached, specify a smaller value.
+     */
+    function restakeCommissions(uint256 epochs) external;
 
     /************************
      * Functions for Staker *
@@ -212,6 +221,16 @@ interface IStakeManager {
         address validator,
         uint256 epochs
     ) external;
+
+    /**
+     * Stake rewards to validator.
+     * The stakes will be effective from current epoch and rewards will be granted.
+     * @param validator Validator address.
+     * @param epochs Number of epochs to be stake.
+     *     If zero is specified, all rewards from the last withdrawal to the present are staked.
+     *     If the gas limit is reached, specify a smaller value.
+     */
+    function restakeRewards(address validator, uint256 epochs) external;
 
     /******************
      * View Functions *

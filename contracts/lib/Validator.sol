@@ -63,7 +63,7 @@ library Validator {
 
     function stake(
         IStakeManager.Validator storage validator,
-        IEnvironment environment,
+        uint256 epoch,
         address staker,
         uint256 amount
     ) internal {
@@ -71,7 +71,7 @@ library Validator {
             validator.stakerExists[staker] = true;
             validator.stakers.push(staker);
         }
-        validator.stakeUpdates.add(validator.stakeAmounts, environment.epoch() + 1, amount);
+        validator.stakeUpdates.add(validator.stakeAmounts, epoch, amount);
     }
 
     function unstake(
@@ -89,9 +89,6 @@ library Validator {
     ) internal returns (uint256) {
         (uint256 commissions, uint256 lastClaim) = getCommissions(validator, environment, epochs);
         validator.lastClaimCommission = lastClaim;
-        if (commissions > 0) {
-            Token.transfers(Token.Type.OAS, validator.owner, commissions);
-        }
         return commissions;
     }
 

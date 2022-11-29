@@ -418,7 +418,6 @@ describe('StakeManager', () => {
       await toNextEpoch()
       await toNextEpoch()
 
-      // from owner
       await expect(await validator.claimCommissions(owner))
         .to.emit(stakeManager, 'ClaimedCommissions')
         .withArgs(validator.owner.address, toBNWei('0.005707762557077625'))
@@ -427,19 +426,49 @@ describe('StakeManager', () => {
 
       await toNextEpoch()
       await toNextEpoch()
+    })
 
-      // from operator
-      await validator.claimCommissions(operator)
-      await expectBalance(stakeManager, '499.982876712328767125', '250', '250')
-      await expectBalance(validator.owner, '10000.017123287671232875', '0', '0')
+    it('restakeCommissions()', async () => {
+      await allowAddress(validator)
+      await validator.joinValidator()
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
+      await toNextEpoch()
+
+      await woas.connect(validator.owner).mint({ gasPrice, value: toWei('1000') })
+      await woas.connect(validator.owner).approve(stakeManager.address, toWei('1000'), { gasPrice })
+
+      await expectBalance(stakeManager, '0', '0', '0')
+      await expectBalance(validator.owner, '9000', '1000', '0')
+      await validator.expectTotalStake('0', '0', '0')
+
+      await validator.stake(Token.wOAS, validator, '1000')
+      await toNextEpoch()
+
+      await expectBalance(stakeManager, '0', '1000', '0')
+      await expectBalance(validator.owner, '9000', '0', '0')
+      await validator.expectTotalStake('0', '1000', '0')
+
+      await expect(validator.restakeCommissions()).to.revertedWith('NoAmount')
+
+      await toNextEpoch()
+
+      const tx = await validator.restakeCommissions()
+      await expect(tx)
+        .to.emit(stakeManager, 'ReStaked')
+        .withArgs(validator.owner.address, validator.owner.address, '1141552511415525')
+
+      await expectBalance(stakeManager, '0', '1000', '0')
+      await expectBalance(validator.owner, '9000', '0', '0')
+      await validator.expectTotalStake('0.00114155', '1000', '0')
 
       await toNextEpoch()
       await toNextEpoch()
+      await toNextEpoch()
+      await validator.restakeCommissions()
 
-      // from outsider
-      await validator.claimCommissions(attacker)
-      await expectBalance(stakeManager, '499.971461187214611875', '250', '250')
-      await expectBalance(validator.owner, '10000.028538812785388125', '0', '0')
+      await expectBalance(stakeManager, '0', '1000', '0')
+      await expectBalance(validator.owner, '9000', '0', '0')
+      await validator.expectTotalStake('0.0045662', '1000', '0')
     })
   })
 
@@ -1254,13 +1283,6 @@ describe('StakeManager', () => {
 
       // check for double claim
       await check2()
-
-      await toNextEpoch()
-
-      // claim from outsider
-      await staker1.claimRewards(validator1, 0, staker2.signer)
-      await expectBalance(staker1.signer, '7000.26769406', '250', '750')
-      await expectBalance(staker2.signer, '6000.40011415', '750', '250')
     })
 
     it('when operating ratio is 50%', async () => {
