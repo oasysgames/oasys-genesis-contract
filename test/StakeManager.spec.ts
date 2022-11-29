@@ -1924,17 +1924,19 @@ describe('StakeManager', () => {
     })
 
     it('getLockedUnstake()', async () => {
-      const expectRequest = async (
+      const expectLockedUnstake = async (
         staker: Staker,
         requestIndex: number,
         expToken: number,
         expAmount: string,
         expUnlockTime: number,
+        expClaimable: boolean,
       ) => {
         const actual = await staker.getLockedUnstake(requestIndex)
         expect(actual.token).to.equal(expToken)
         expect(fromWei(actual.amount.toString())).to.equal(expAmount)
         expect(actual.unlockTime).to.equal(expUnlockTime)
+        expect(actual.claimable).to.equal(expClaimable)
       }
 
       const calcBlockTime = async (tx: any, add: number) => {
@@ -1946,30 +1948,83 @@ describe('StakeManager', () => {
       await staker1.stake(Token.wOAS, validator1, '10')
 
       const tx1 = await staker1.unstakeV2(0, validator1, '1')
+      const block = await ethers.provider.getBlock('latest')
+
+      await toNextEpoch()
       const tx2 = await staker1.unstakeV2(1, validator1, '2')
 
-      await expectRequest(staker1, 0, Token.OAS, '1', await calcBlockTime(tx1, 864000))
-      await expectRequest(staker1, 1, Token.wOAS, '2', await calcBlockTime(tx2, 864000))
+      await expectLockedUnstake(staker1, 0, Token.OAS, '1', await calcBlockTime(tx1, 864000), false)
+      await expectLockedUnstake(staker1, 1, Token.wOAS, '2', await calcBlockTime(tx2, 864000), false)
+
+      await network.provider.send('evm_setNextBlockTimestamp', [block.timestamp + 864000])
+      await network.provider.send('evm_mine')
+
+      await expectLockedUnstake(staker1, 0, Token.OAS, '1', await calcBlockTime(tx1, 864000), true)
+      await expectLockedUnstake(staker1, 1, Token.wOAS, '2', await calcBlockTime(tx2, 864000), false)
+
+      await staker1.claimLockedUnstake(0)
+      await expect(staker1.claimLockedUnstake(1)).to.revertedWith('Locked')
+
+      await expectLockedUnstake(staker1, 0, Token.OAS, '1', 0, false)
+      await expectLockedUnstake(staker1, 1, Token.wOAS, '2', await calcBlockTime(tx2, 864000), false)
     })
 
     it('getLockedUnstakes()', async () => {
+      const range = (n: number) => [...Array(n).keys()]
+      const block = await ethers.provider.getBlock('latest')
+
       await staker1.stake(Token.OAS, validator1, '1275')
 
-      for (let i = 1; i <= 50; i++) {
+      for (let i = 1; i <= 25; i++) {
         await staker1.unstakeV2(0, validator1, String(i))
       }
 
-      for (const cursor of [0, 10, 20, 30, 40]) {
-        const actual = await staker1.getLockedUnstakes(cursor, 10)
-        expect(actual.unstakes.map((x) => x.amount)).to.eql(
-          [...Array(10).keys()].map((x) => toBNWei(String(x + cursor + 1))),
-        )
-        expect(actual.newCursor).to.equal(cursor + 10)
-      }
+      let actual1 = await staker1.getLockedUnstakes(0, 10)
+      let actual2 = await staker1.getLockedUnstakes(10, 10)
+      let actual3 = await staker1.getLockedUnstakes(20, 10)
+      const actual4 = await staker1.getLockedUnstakes(25, 10)
 
-      const actual = await staker1.getLockedUnstakes(50, 10)
-      expect(actual.unstakes).to.eql([])
-      expect(actual.newCursor).to.equal(50)
+      expect(actual1.tokens).to.eql(range(10).map((_) => Token.OAS))
+      expect(actual2.tokens).to.eql(range(10).map((_) => Token.OAS))
+      expect(actual3.tokens).to.eql(range(5).map((_) => Token.OAS))
+      expect(actual4.tokens).to.eql([])
+
+      expect(actual1.amounts).to.eql(range(10).map((x) => toBNWei(String(x + 1))))
+      expect(actual2.amounts).to.eql(range(10).map((x) => toBNWei(String(x + 11))))
+      expect(actual3.amounts).to.eql(range(5).map((x) => toBNWei(String(x + 21))))
+      expect(actual4.amounts).to.eql([])
+
+      expect(actual1.unlockTimes).to.satisfy((times: BigNumber[]) =>
+        times.every((x) => x.toNumber() > block.timestamp + 864000),
+      )
+      expect(actual2.unlockTimes).to.satisfy((times: BigNumber[]) =>
+        times.every((x) => x.toNumber() > block.timestamp + 864000),
+      )
+      expect(actual3.unlockTimes).to.satisfy((times: BigNumber[]) =>
+        times.every((x) => x.toNumber() > block.timestamp + 864000),
+      )
+      expect(actual4.unlockTimes).to.eql([])
+
+      expect(actual1.claimable).to.satisfies((x: boolean[]) => x.every((y) => !y))
+      expect(actual2.claimable).to.satisfies((x: boolean[]) => x.every((y) => !y))
+      expect(actual3.claimable).to.satisfies((x: boolean[]) => x.every((y) => !y))
+      expect(actual4.claimable).to.eql([])
+
+      expect(actual1.newCursor).to.equal(10)
+      expect(actual2.newCursor).to.equal(20)
+      expect(actual3.newCursor).to.equal(25)
+      expect(actual4.newCursor).to.equal(25)
+
+      await network.provider.send('evm_setNextBlockTimestamp', [block.timestamp + 864100])
+      await network.provider.send('evm_mine')
+
+      actual1 = await staker1.getLockedUnstakes(0, 10)
+      expect(actual1.claimable).to.satisfies((x: boolean[]) => x.every((y) => y))
+
+      await Promise.all(range(10).map((x) => staker1.claimLockedUnstake(x)))
+
+      actual1 = await staker1.getLockedUnstakes(0, 10)
+      expect(actual1.unlockTimes).to.satisfy((times: BigNumber[]) => times.every((x) => x.toNumber() == 0))
     })
 
     it('getValidatorStakes()', async () => {

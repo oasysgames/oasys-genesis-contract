@@ -32,12 +32,6 @@ interface StakerInfo {
   unstakes: BigNumber
 }
 
-interface LockedUnstake {
-  token: number
-  amount: BigNumber
-  unlockTime: BigNumber
-}
-
 const gasPrice = 0
 
 class Validator {
@@ -191,7 +185,9 @@ class Staker {
     return await this._contract.getLockedUnstakeCount(this.signer.address)
   }
 
-  async getLockedUnstake(lockedUnstake: number): Promise<LockedUnstake> {
+  async getLockedUnstake(
+    lockedUnstake: number,
+  ): Promise<{ token: number; amount: BigNumber; unlockTime: BigNumber; claimable: boolean }> {
     return await this._contract.getLockedUnstake(this.signer.address, lockedUnstake)
   }
 
@@ -199,7 +195,10 @@ class Staker {
     cursor = 0,
     howMany = 100,
   ): Promise<{
-    unstakes: LockedUnstake[]
+    tokens: number[]
+    amounts: BigNumber[]
+    unlockTimes: BigNumber[]
+    claimable: boolean[]
     newCursor: number
   }> {
     return await this._contract.getLockedUnstakes(this.signer.address, cursor, howMany)

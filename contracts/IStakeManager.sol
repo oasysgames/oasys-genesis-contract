@@ -344,26 +344,46 @@ interface IStakeManager {
      * Returns specific locked unstake.
      * @param staker Staker address.
      * @param lockedUnstake The index of unstake request.
-     * @return _unstake Locked unstake.
+     * @return token Type of locked token.
+     * @return amount Amount of locked token.
+     * @return unlockTime Block time to be unlocked.
+     * @return claimable Whether locked token can be claimed.
      */
     function getLockedUnstake(address staker, uint256 lockedUnstake)
         external
         view
-        returns (LockedUnstake memory _unstake);
+        returns (
+            Token.Type token,
+            uint256 amount,
+            uint256 unlockTime,
+            bool claimable
+        );
 
     /**
      * Returns list of locked unstakes.
      * @param staker Staker address.
      * @param cursor The index of the first item being requested.
      * @param howMany Indicates how many items should be returned.
-     * @return unstakes List of locked unstakes.
+     * @return tokens Type of locked token.
+     * @return amounts Amount of locked token.
+     * @return unlockTimes Block time to be unlocked.
+     * @return claimable Whether locked token can be claimed.
      * @return newCursor Cursor that should be used in the next request.
      */
     function getLockedUnstakes(
         address staker,
         uint256 cursor,
         uint256 howMany
-    ) external view returns (LockedUnstake[] memory unstakes, uint256 newCursor);
+    )
+        external
+        view
+        returns (
+            Token.Type[] memory tokens,
+            uint256[] memory amounts,
+            uint256[] memory unlockTimes,
+            bool[] memory claimable,
+            uint256 newCursor
+        );
 
     /**
      * Returns the balance of staking rewards.

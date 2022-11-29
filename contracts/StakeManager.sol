@@ -504,9 +504,20 @@ contract StakeManager is IStakeManager, System {
     function getLockedUnstake(address staker, uint256 lockedUnstake)
         external
         view
-        returns (LockedUnstake memory _unstake)
+        returns (
+            Token.Type token,
+            uint256 amount,
+            uint256 unlockTime,
+            bool claimable
+        )
     {
-        return stakers[staker].lockedUnstakes[lockedUnstake];
+        LockedUnstake memory _unstake = stakers[staker].lockedUnstakes[lockedUnstake];
+        return (
+            _unstake.token,
+            _unstake.amount,
+            _unstake.unlockTime,
+            _unstake.unlockTime != 0 && block.timestamp >= _unstake.unlockTime
+        );
     }
 
     /**
@@ -516,17 +527,34 @@ contract StakeManager is IStakeManager, System {
         address staker,
         uint256 cursor,
         uint256 howMany
-    ) external view returns (LockedUnstake[] memory unstakes, uint256 newCursor) {
+    )
+        external
+        view
+        returns (
+            Token.Type[] memory tokens,
+            uint256[] memory amounts,
+            uint256[] memory unlockTimes,
+            bool[] memory claimable,
+            uint256 newCursor
+        )
+    {
         Staker storage _staker = stakers[staker];
 
         (howMany, newCursor) = _pagination(cursor, howMany, _staker.lockedUnstakes.length);
-        unstakes = new LockedUnstake[](howMany);
+        tokens = new Token.Type[](howMany);
+        amounts = new uint256[](howMany);
+        unlockTimes = new uint256[](howMany);
+        claimable = new bool[](howMany);
 
         for (uint256 i = 0; i < howMany; i++) {
-            unstakes[i] = _staker.lockedUnstakes[cursor + i];
+            LockedUnstake memory _unstake = _staker.lockedUnstakes[cursor + i];
+            tokens[i] = _unstake.token;
+            amounts[i] = _unstake.amount;
+            unlockTimes[i] = _unstake.unlockTime;
+            claimable[i] = _unstake.unlockTime != 0 && block.timestamp >= _unstake.unlockTime;
         }
 
-        return (unstakes, newCursor);
+        return (tokens, amounts, unlockTimes, claimable, newCursor);
     }
 
     /**
