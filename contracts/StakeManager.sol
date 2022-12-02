@@ -233,10 +233,11 @@ contract StakeManager is IStakeManager, System {
      */
     function claimCommissions(address validator, uint256 epochs) external validatorExists(msg.sender) {
         uint256 amount = validators[msg.sender].claimCommissions(environment, epochs);
+        emit ClaimedCommissions(msg.sender, amount);
+
         if (amount > 0) {
             Token.transfers(Token.Type.OAS, msg.sender, amount);
         }
-        emit ClaimedCommissions(msg.sender, amount);
     }
 
     /**
@@ -322,9 +323,9 @@ contract StakeManager is IStakeManager, System {
         if (unlockTime == 0) revert AlreadyClaimed();
 
         request.unlockTime = 0;
-        Token.transfers(request.token, msg.sender, request.amount);
-
         emit ClaimedLockedUnstake(msg.sender, lockedUnstake);
+
+        Token.transfers(request.token, msg.sender, request.amount);
     }
 
     /**
@@ -336,10 +337,11 @@ contract StakeManager is IStakeManager, System {
         uint256 epochs
     ) external validatorExists(validator) stakerExists(msg.sender) {
         uint256 amount = stakers[msg.sender].claimRewards(environment, validators[validator], epochs);
+        emit ClaimedRewards(msg.sender, validator, amount);
+
         if (amount > 0) {
             Token.transfers(Token.Type.OAS, msg.sender, amount);
         }
-        emit ClaimedRewards(msg.sender, validator, amount);
     }
 
     /**
