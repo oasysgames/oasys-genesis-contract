@@ -23,17 +23,13 @@ library Staker {
 
     function stake(
         IStakeManager.Staker storage staker,
-        IEnvironment environment,
+        uint256 epoch,
         IStakeManager.Validator storage validator,
         Token.Type token,
         uint256 amount
     ) internal {
-        staker.stakeUpdates[token][validator.owner].add(
-            staker.stakeAmounts[token][validator.owner],
-            environment.epoch() + 1,
-            amount
-        );
-        validator.stake(environment, staker.signer, amount);
+        staker.stakeUpdates[token][validator.owner].add(staker.stakeAmounts[token][validator.owner], epoch, amount);
+        validator.stake(epoch, staker.signer, amount);
     }
 
     function unstake(
@@ -43,31 +39,14 @@ library Staker {
         Token.Type token,
         uint256 amount
     ) internal returns (uint256) {
-        uint256 epoch = environment.epoch();
-        uint256 current = getStake(staker, validator.owner, token, epoch);
-        uint256 next = getStake(staker, validator.owner, token, epoch + 1);
-
         amount = staker.stakeUpdates[token][validator.owner].sub(
             staker.stakeAmounts[token][validator.owner],
-            epoch + 1,
+            environment.epoch() + 1,
             amount
         );
         if (amount == 0) return 0;
         validator.unstake(environment, amount);
 
-        uint256 unstakes = amount;
-        uint256 refunds;
-        if (next > current) {
-            refunds = next - current;
-            refunds = amount < refunds ? amount : refunds;
-            unstakes -= refunds;
-        }
-        if (unstakes > 0) {
-            _addUnstakeAmount(staker, environment, token, unstakes);
-        }
-        if (refunds > 0) {
-            Token.transfers(token, staker.signer, refunds);
-        }
         return amount;
     }
 
@@ -79,9 +58,6 @@ library Staker {
     ) internal returns (uint256) {
         (uint256 rewards, uint256 lastClaim) = getRewards(staker, environment, validator, epochs);
         staker.lastClaimReward[validator.owner] = lastClaim;
-        if (rewards > 0) {
-            Token.transfers(Token.Type.OAS, staker.signer, rewards);
-        }
         return rewards;
     }
 
@@ -164,23 +140,6 @@ library Staker {
     /*********************
      * Private Functions *
      *********************/
-
-    function _addUnstakeAmount(
-        IStakeManager.Staker storage staker,
-        IEnvironment environment,
-        Token.Type token,
-        uint256 amount
-    ) private {
-        uint256 nextEpoch = environment.epoch() + 1;
-        uint256 length = staker.unstakeUpdates[token].length;
-
-        if (length == 0 || staker.unstakeUpdates[token][length - 1] != nextEpoch) {
-            staker.unstakeUpdates[token].push(nextEpoch);
-            staker.unstakeAmounts[token].push(amount);
-            return;
-        }
-        staker.unstakeAmounts[token][length - 1] += amount;
-    }
 
     function _claimUnstakes(
         IStakeManager.Staker storage staker,

@@ -46,6 +46,25 @@
         },
         {
           "indexed": false,
+          "internalType": "uint256",
+          "name": "lockedUnstake",
+          "type": "uint256"
+        }
+      ],
+      "name": "ClaimedLockedUnstake",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        },
+        {
+          "indexed": false,
           "internalType": "address",
           "name": "validator",
           "type": "address"
@@ -83,6 +102,31 @@
         }
       ],
       "name": "OperatorUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "validator",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "ReStaked",
       "type": "event"
     },
     {
@@ -145,6 +189,31 @@
         }
       ],
       "name": "Unstaked",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "validator",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "lockedUnstake",
+          "type": "uint256"
+        }
+      ],
+      "name": "UnstakedV2",
       "type": "event"
     },
     {
@@ -276,6 +345,19 @@
     {
       "inputs": [
         {
+          "internalType": "uint256",
+          "name": "lockedUnstake",
+          "type": "uint256"
+        }
+      ],
+      "name": "claimLockedUnstake",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "address",
           "name": "staker",
           "type": "address"
@@ -374,6 +456,113 @@
         {
           "internalType": "uint256",
           "name": "commissions",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "lockedUnstake",
+          "type": "uint256"
+        }
+      ],
+      "name": "getLockedUnstake",
+      "outputs": [
+        {
+          "internalType": "enum Token.Type",
+          "name": "token",
+          "type": "uint8"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "unlockTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "claimable",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        }
+      ],
+      "name": "getLockedUnstakeCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "count",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "cursor",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "howMany",
+          "type": "uint256"
+        }
+      ],
+      "name": "getLockedUnstakes",
+      "outputs": [
+        {
+          "internalType": "enum Token.Type[]",
+          "name": "tokens",
+          "type": "uint8[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "amounts",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "unlockTimes",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "bool[]",
+          "name": "claimable",
+          "type": "bool[]"
+        },
+        {
+          "internalType": "uint256",
+          "name": "newCursor",
           "type": "uint256"
         }
       ],
@@ -764,6 +953,37 @@
     {
       "inputs": [
         {
+          "internalType": "uint256",
+          "name": "epochs",
+          "type": "uint256"
+        }
+      ],
+      "name": "restakeCommissions",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "validator",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "epochs",
+          "type": "uint256"
+        }
+      ],
+      "name": "restakeRewards",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "address",
           "name": "operator",
           "type": "address"
@@ -821,6 +1041,29 @@
         }
       ],
       "name": "unstake",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "validator",
+          "type": "address"
+        },
+        {
+          "internalType": "enum Token.Type",
+          "name": "token",
+          "type": "uint8"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "unstakeV2",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

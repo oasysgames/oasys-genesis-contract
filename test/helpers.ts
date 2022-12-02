@@ -53,6 +53,10 @@ class Validator {
       .unstake(validator.owner.address, token, toWei(amount), { gasPrice })
   }
 
+  unstakeV2(token: number, validator: Validator, amount: string) {
+    return this._contract.connect(this.owner).unstakeV2(validator.owner.address, token, toWei(amount), { gasPrice })
+  }
+
   joinValidator(operator?: string) {
     return this._contract.connect(this.owner).joinValidator(operator || this.operator.address, { gasPrice })
   }
@@ -71,6 +75,10 @@ class Validator {
 
   claimCommissions(sender?: Account, epochs?: number) {
     return this._contract.connect(sender || this.owner).claimCommissions(this.owner.address, epochs ?? 0, { gasPrice })
+  }
+
+  restakeCommissions(epochs = 0) {
+    return this._contract.connect(this.owner).restakeCommissions(epochs, { gasPrice })
   }
 
   async getInfo(epoch?: number): Promise<ValidatorInfo> {
@@ -112,6 +120,10 @@ class Validator {
     expect(actual).to.equal(toBNWei(expectEther))
   }
 
+  async expectTotalStake(expectOAS: string, expectWOAS: string, expectSOAS: string) {
+    await expectTotalStake(this._contract, this.owner, expectOAS, expectWOAS, expectSOAS)
+  }
+
   async expectSlashes(epoch: number, expectBlocks: number, expectSlashes: number) {
     const { blocks, slashes } = await this._contract.getBlockAndSlashes(this.owner.address, epoch)
     expect(blocks).to.equal(expectBlocks)
@@ -143,26 +155,53 @@ class Staker {
     return this.contract.unstake(validator.owner.address, token, toWei(amount), { gasPrice })
   }
 
+  unstakeV2(token: number, validator: Validator, amount: string) {
+    return this.contract.unstakeV2(validator.owner.address, token, toWei(amount), { gasPrice })
+  }
+
   claimRewards(validator: Validator, epochs: number, sender?: Account) {
     return this._contract
       .connect(sender ?? this.signer)
       .claimRewards(this.address, validator.owner.address, epochs, { gasPrice })
   }
 
+  restakeRewards(validator: Validator, epochs = 0) {
+    return this.contract.restakeRewards(validator.owner.address, epochs, { gasPrice })
+  }
+
   claimUnstakes(sender?: Account) {
     return this._contract.connect(sender ?? this.signer).claimUnstakes(this.address, { gasPrice })
   }
 
-  async getStakes(
-    epoch?: number,
-    cursor = 0,
-    howMany = 100,
-  ): Promise<{ oasStakes: BigNumber[]; woasStakes: BigNumber[]; soasStakes: BigNumber[]; newCursor: BigNumber }> {
-    return await this._contract.getStakerStakes(this.signer.address, epoch ?? 0, cursor, howMany)
+  claimLockedUnstake(lockedUnstake: number) {
+    return this._contract.connect(this.signer).claimLockedUnstake(lockedUnstake, { gasPrice })
   }
 
   async getUnstakes(): Promise<{ oasUnstakes: BigNumber; woasUnstakes: BigNumber; soasUnstakes: BigNumber }> {
     return await this._contract.getUnstakes(this.signer.address)
+  }
+
+  async getLockedUnstakeCount(): Promise<BigNumber> {
+    return await this._contract.getLockedUnstakeCount(this.signer.address)
+  }
+
+  async getLockedUnstake(
+    lockedUnstake: number,
+  ): Promise<{ token: number; amount: BigNumber; unlockTime: BigNumber; claimable: boolean }> {
+    return await this._contract.getLockedUnstake(this.signer.address, lockedUnstake)
+  }
+
+  async getLockedUnstakes(
+    cursor = 0,
+    howMany = 100,
+  ): Promise<{
+    tokens: number[]
+    amounts: BigNumber[]
+    unlockTimes: BigNumber[]
+    claimable: boolean[]
+    newCursor: number
+  }> {
+    return await this._contract.getLockedUnstakes(this.signer.address, cursor, howMany)
   }
 
   async expectRewards(expectEther: string, validator: Validator, epochs?: number) {
@@ -171,14 +210,7 @@ class Staker {
   }
 
   async expectTotalStake(expectOAS: string, expectWOAS: string, expectSOAS: string) {
-    const sum = (arr: BigNumber[]): BigNumber => {
-      return arr.reduce((sum, element) => sum.add(element), BigNumber.from(0))
-    }
-
-    const { oasStakes, woasStakes, soasStakes } = await this.getStakes()
-    expect(sum(oasStakes)).to.equal(toBNWei(expectOAS))
-    expect(sum(woasStakes)).to.equal(toBNWei(expectWOAS))
-    expect(sum(soasStakes)).to.equal(toBNWei(expectSOAS))
+    await expectTotalStake(this._contract, this.signer, expectOAS, expectWOAS, expectSOAS)
   }
 
   async expectStakes(
@@ -242,6 +274,34 @@ const makeHashWithNonce = (nonce: number, to: string, encodedSelector: string) =
 const makeExpiration = (duration?: number): number => {
   const dt = new Date()
   return ~~(dt.getTime() / 1000) + (duration ?? 86400)
+}
+
+const getStakes = async (
+  stakeManager: Contract,
+  staker: Account,
+  epoch?: number,
+  cursor = 0,
+  howMany = 100,
+): Promise<{ oasStakes: BigNumber[]; woasStakes: BigNumber[]; soasStakes: BigNumber[]; newCursor: BigNumber }> => {
+  return stakeManager.getStakerStakes(staker.address, epoch ?? 0, cursor, howMany)
+}
+
+const expectTotalStake = async (
+  stakeManager: Contract,
+  staker: Account,
+  expectOAS: string,
+  expectWOAS: string,
+  expectSOAS: string,
+) => {
+  const sum = (arr: BigNumber[]): string => {
+    const x = arr.reduce((sum, element) => sum.add(element), BigNumber.from(0))
+    return fromWei(x.toString())
+  }
+
+  const { oasStakes, woasStakes, soasStakes } = await getStakes(stakeManager, staker)
+  expect(sum(oasStakes)).to.match(new RegExp(`^${expectOAS}`))
+  expect(sum(woasStakes)).to.match(new RegExp(`^${expectWOAS}`))
+  expect(sum(soasStakes)).to.match(new RegExp(`^${expectSOAS}`))
 }
 
 const chainid = network.config.chainId!

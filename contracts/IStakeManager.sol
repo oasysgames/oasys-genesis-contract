@@ -22,9 +22,12 @@ interface IStakeManager {
     event ValidatorJailed(address indexed validator, uint256 until);
     event OperatorUpdated(address indexed validator, address oldOperator, address newOperator);
     event Staked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
+    event ReStaked(address indexed staker, address indexed validator, uint256 amount);
     event Unstaked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
+    event UnstakedV2(address indexed staker, address indexed validator, uint256 lockedUnstake);
     event ClaimedCommissions(address indexed validator, uint256 amount);
     event ClaimedRewards(address indexed staker, address validator, uint256 amount);
+    event ClaimedLockedUnstake(address indexed staker, uint256 lockedUnstake);
 
     /***********
      * Structs *
@@ -67,6 +70,14 @@ interface IStakeManager {
         mapping(Token.Type => uint256[]) unstakeAmounts;
         // Epoch of last claimed of rewards per validator
         mapping(address => uint256) lastClaimReward;
+        // List of locked unstakes
+        LockedUnstake[] lockedUnstakes;
+    }
+
+    struct LockedUnstake {
+        Token.Type token;
+        uint256 amount;
+        uint256 unlockTime;
     }
 
     /**
@@ -126,13 +137,21 @@ interface IStakeManager {
 
     /**
      * Withdraw validator commissions.
-     * Both owner and operator can be executed, but the remittance destination will be owner address.
-     * @param validator Validator address.
+     * @param validator [UNUSED] Validator address.
      * @param epochs Number of epochs to be withdrawn.
      *     If zero is specified, all commissions from the last withdrawal to the present will be withdrawn.
      *     If the gas limit is reached, specify a smaller value.
      */
     function claimCommissions(address validator, uint256 epochs) external;
+
+    /**
+     * Stake commissions to yourself.
+     * The stakes will be effective from current epoch and rewards will be granted.
+     * @param epochs Number of epochs to be stake.
+     *     If zero is specified, all commissions from the last withdrawal to the present are staked.
+     *     If the gas limit is reached, specify a smaller value.
+     */
+    function restakeCommissions(uint256 epochs) external;
 
     /************************
      * Functions for Staker *
@@ -152,7 +171,7 @@ interface IStakeManager {
     ) external payable;
 
     /**
-     * Unstake tokens from validator.
+     * [OBSOLETED] Unstake tokens from validator.
      * The stake will be locked until the end of the current epoch, but will be rewarded.
      * @param validator Validator address.
      * @param token Type of token.
@@ -165,10 +184,29 @@ interface IStakeManager {
     ) external;
 
     /**
+     * Unstake tokens from validator. The unstaked token will be locked about 10 days.
+     * Rewards for the current epoch will be granted.
+     * @param validator Validator address.
+     * @param token Type of token.
+     * @param amount Unstake amounts.
+     */
+    function unstakeV2(
+        address validator,
+        Token.Type token,
+        uint256 amount
+    ) external;
+
+    /**
      * Withdraw unstaked tokens whose lock period has expired.
-     * @param staker Staker address.
+     * @param staker [UNUSED] Staker address.
      */
     function claimUnstakes(address staker) external;
+
+    /**
+     * Withdraw unstaked token whose lock period has expired.
+     * @param lockedUnstake The index of unstake request.
+     */
+    function claimLockedUnstake(uint256 lockedUnstake) external;
 
     /**
      * Withdraw staking rewards.
@@ -183,6 +221,16 @@ interface IStakeManager {
         address validator,
         uint256 epochs
     ) external;
+
+    /**
+     * Stake rewards to validator.
+     * The stakes will be effective from current epoch and rewards will be granted.
+     * @param validator Validator address.
+     * @param epochs Number of epochs to be stake.
+     *     If zero is specified, all rewards from the last withdrawal to the present are staked.
+     *     If the gas limit is reached, specify a smaller value.
+     */
+    function restakeRewards(address validator, uint256 epochs) external;
 
     /******************
      * View Functions *
@@ -283,6 +331,58 @@ interface IStakeManager {
             uint256 oasUnstakes,
             uint256 woasUnstakes,
             uint256 soasUnstakes
+        );
+
+    /**
+     * Returns number of locked unstakes.
+     * @param staker Staker address.
+     * @return count Number of locked unstakes.
+     */
+    function getLockedUnstakeCount(address staker) external returns (uint256 count);
+
+    /**
+     * Returns specific locked unstake.
+     * @param staker Staker address.
+     * @param lockedUnstake The index of unstake request.
+     * @return token Type of locked token.
+     * @return amount Amount of locked token.
+     * @return unlockTime Block time to be unlocked.
+     * @return claimable Whether locked token can be claimed.
+     */
+    function getLockedUnstake(address staker, uint256 lockedUnstake)
+        external
+        view
+        returns (
+            Token.Type token,
+            uint256 amount,
+            uint256 unlockTime,
+            bool claimable
+        );
+
+    /**
+     * Returns list of locked unstakes.
+     * @param staker Staker address.
+     * @param cursor The index of the first item being requested.
+     * @param howMany Indicates how many items should be returned.
+     * @return tokens Type of locked token.
+     * @return amounts Amount of locked token.
+     * @return unlockTimes Block time to be unlocked.
+     * @return claimable Whether locked token can be claimed.
+     * @return newCursor Cursor that should be used in the next request.
+     */
+    function getLockedUnstakes(
+        address staker,
+        uint256 cursor,
+        uint256 howMany
+    )
+        external
+        view
+        returns (
+            Token.Type[] memory tokens,
+            uint256[] memory amounts,
+            uint256[] memory unlockTimes,
+            bool[] memory claimable,
+            uint256 newCursor
         );
 
     /**

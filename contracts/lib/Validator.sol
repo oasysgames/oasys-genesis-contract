@@ -63,7 +63,7 @@ library Validator {
 
     function stake(
         IStakeManager.Validator storage validator,
-        IEnvironment environment,
+        uint256 epoch,
         address staker,
         uint256 amount
     ) internal {
@@ -71,7 +71,7 @@ library Validator {
             validator.stakerExists[staker] = true;
             validator.stakers.push(staker);
         }
-        validator.stakeUpdates.add(validator.stakeAmounts, environment.epoch() + 1, amount);
+        validator.stakeUpdates.add(validator.stakeAmounts, epoch, amount);
     }
 
     function unstake(
@@ -89,9 +89,6 @@ library Validator {
     ) internal returns (uint256) {
         (uint256 commissions, uint256 lastClaim) = getCommissions(validator, environment, epochs);
         validator.lastClaimCommission = lastClaim;
-        if (commissions > 0) {
-            Token.transfers(Token.Type.OAS, validator.owner, commissions);
-        }
         return commissions;
     }
 
@@ -136,23 +133,29 @@ library Validator {
         IStakeManager.Validator storage validator,
         IEnvironment.EnvironmentValue memory env,
         uint256 epoch
-    ) internal view returns (uint256) {
+    ) internal view returns (uint256 rewards) {
         if (isInactive(validator, epoch) || isJailed(validator, epoch)) return 0;
 
         uint256 _stake = getTotalStake(validator, epoch);
-        if (_stake == 0) return 0;
 
-        uint256 rewards = (_stake *
-            Math.percent(env.rewardRate, Constants.MAX_REWARD_RATE, Constants.REWARD_PRECISION)) /
-            10**Constants.REWARD_PRECISION;
-        if (rewards == 0) return 0;
+        if (epoch >= 73) {
+            if (_stake < env.validatorThreshold) return 0;
+            rewards = (_stake * 2612) / 1e7;
+        } else {
+            if (_stake == 0) return 0;
 
-        rewards *= Math.percent(
-            env.blockPeriod * env.epochPeriod,
-            Constants.SECONDS_PER_YEAR,
-            Constants.REWARD_PRECISION
-        );
-        rewards /= 10**Constants.REWARD_PRECISION;
+            rewards =
+                (_stake * Math.percent(env.rewardRate, Constants.MAX_REWARD_RATE, Constants.REWARD_PRECISION)) /
+                10**Constants.REWARD_PRECISION;
+            if (rewards == 0) return 0;
+
+            rewards *= Math.percent(
+                env.blockPeriod * env.epochPeriod,
+                Constants.SECONDS_PER_YEAR,
+                Constants.REWARD_PRECISION
+            );
+            rewards /= 10**Constants.REWARD_PRECISION;
+        }
 
         uint256 slashes = validator.slashes[epoch];
         if (slashes > 0) {
