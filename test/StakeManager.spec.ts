@@ -936,7 +936,6 @@ describe('StakeManager', () => {
       const tx2 = await staker1.unstakeV2(Token.wOAS, validator1, '2.5')
       await expect(tx1).to.emit(stakeManager, 'UnstakedV2').withArgs(staker1.address, validator1.owner.address, 0)
       await expect(tx2).to.emit(stakeManager, 'UnstakedV2').withArgs(staker1.address, validator1.owner.address, 1)
-      await expect(staker1.unstakeV2(Token.sOAS, validator1, '1')).to.revertedWith('NoAmount')
 
       await expectBalance(stakeManager, '515', '5', '10')
       await expectBalance(staker1.signer, '7985', '995', '990')
@@ -1005,6 +1004,7 @@ describe('StakeManager', () => {
       await staker1.unstakeV2(Token.wOAS, validator1, '9999')
       await staker1.unstakeV2(Token.OAS, validator2, '5')
       await staker1.unstakeV2(Token.sOAS, validator2, '5')
+      await expect(staker1.unstakeV2(Token.wOAS, validator1, '1')).to.revertedWith('NoAmount')
 
       expect(await staker1.getLockedUnstakeCount()).to.equal(10)
 
