@@ -2027,7 +2027,7 @@ describe('StakeManager', () => {
       expect(actual1.unlockTimes).to.satisfy((times: BigNumber[]) => times.every((x) => x.toNumber() == 0))
     })
 
-    it('getValidatorStakes()', async () => {
+    it('getValidatorStakes(address,uint256,uint256,uint256)', async () => {
       await staker1.stake(Token.OAS, validator1, '10')
       await toNextEpoch()
 
@@ -2103,6 +2103,41 @@ describe('StakeManager', () => {
         10,
         6,
       )
+    })
+
+    it('getValidatorStakes(address,uint256) and getOperatorStakes()', async () => {
+      const check = async (validator: Validator, epoch: number, exp: string) => {
+        const actual1 = await stakeManager['getValidatorStakes(address,uint256)'](validator.owner.address, epoch)
+        const actual2 = await stakeManager.getOperatorStakes(validator.operator.address, epoch)
+        expect(actual1.toString()).to.equal(toWei(exp))
+        expect(actual2.toString()).to.equal(toWei(exp))
+      }
+
+      await staker1.stake(Token.OAS, validator1, '10')
+      await toNextEpoch()
+
+      await staker2.stake(Token.OAS, validator1, '20')
+      await toNextEpoch()
+
+      await staker1.stake(Token.OAS, validator1, '30')
+      await staker3.stake(Token.OAS, validator1, '30')
+      await toNextEpoch()
+
+      await staker4.stake(Token.OAS, validator1, '40')
+      await staker5.stake(Token.OAS, validator1, '50')
+      await staker6.stake(Token.OAS, validator1, '60')
+      await toNextEpoch()
+
+      await staker2.unstakeV2(Token.OAS, validator1, '20')
+      await toNextEpoch()
+
+      await check(validator1, 1, '0')
+      await check(validator1, 2, '10')
+      await check(validator1, 3, '30')
+      await check(validator1, 4, '90')
+      await check(validator1, 5, '240')
+      await check(validator1, 6, '220')
+      await check(validator1, 0, '220')
     })
 
     it('getStakerStakes()', async () => {
