@@ -416,6 +416,22 @@ interface IStakeManager {
     function getTotalRewards(address[] memory validators, uint256 epochs) external view returns (uint256 rewards);
 
     /**
+     * Returns the staked amount of the validator.
+     * @param validator Validator address.
+     * @param epoch Target epoch number.
+     * @return stakes Staked amounts.
+     */
+    function getValidatorStakes(address validator, uint256 epoch) external view returns (uint256 stakes);
+
+    /**
+     * Returns the staked amount of the operator.
+     * @param operator Operator address.
+     * @param epoch Target epoch number.
+     * @return stakes Staked amounts.
+     */
+    function getOperatorStakes(address operator, uint256 epoch) external view returns (uint256 stakes);
+
+    /**
      * Returns a list of stakers and amounts to the validator.
      * @param validator Validator address.
      * @param epoch Target epoch number.

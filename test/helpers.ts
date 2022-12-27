@@ -97,7 +97,7 @@ class Validator {
     howMany = 100,
     expectNewCursor?: number,
   ) {
-    const { _stakers, stakes, newCursor } = await this._contract.getValidatorStakes(
+    const { _stakers, stakes, newCursor } = await this._contract['getValidatorStakes(address,uint256,uint256,uint256)'](
       this.owner.address,
       epoch,
       cursor,

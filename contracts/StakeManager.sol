@@ -601,6 +601,25 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
+    function getValidatorStakes(address validator, uint256 epoch) external view returns (uint256 stakes) {
+        epoch = epoch > 0 ? epoch : environment.epoch();
+        return validators[validator].getTotalStake(epoch);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function getOperatorStakes(address operator, uint256 epoch) external view returns (uint256 stakes) {
+        Validator storage validator = validators[operatorToOwner[operator]];
+        if (validator.operator != operator) return 0;
+
+        epoch = epoch > 0 ? epoch : environment.epoch();
+        return validator.getTotalStake(epoch);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
     function getValidatorStakes(
         address validator,
         uint256 epoch,
