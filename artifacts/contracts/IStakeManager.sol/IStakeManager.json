@@ -573,6 +573,30 @@
       "inputs": [
         {
           "internalType": "address",
+          "name": "operator",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "epoch",
+          "type": "uint256"
+        }
+      ],
+      "name": "getOperatorStakes",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "stakes",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
           "name": "staker",
           "type": "address"
         },
@@ -820,6 +844,30 @@
         {
           "internalType": "uint256",
           "name": "newCursor",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "validator",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "epoch",
+          "type": "uint256"
+        }
+      ],
+      "name": "getValidatorStakes",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "stakes",
           "type": "uint256"
         }
       ],
