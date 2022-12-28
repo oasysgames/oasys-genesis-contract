@@ -28,24 +28,36 @@ This setup is for developers of [oasys-genesis-contract](https://github.com/oasy
 npx hardhat node
 ```
 
-## Deploy contracts
-```shell
-npx hardhat --network localhost deploy:local
-```
-# Setup(localhost oasys-verse-layer)
-Do `Setup(localhost oasys-hub-layer)` first.
-
-After that, move to oasys-optimism's [oasys-contract](https://github.com/oasysgames/oasys-optimism/tree/develop/packages/contracts).
-
 ## Deploy optimism L1 contracts
+Move to oasys-optimism's [oasys-contract](https://github.com/oasysgames/oasys-optimism/tree/develop/packages/contracts).
+You set that node version is 15.
+
 ```shell
-npx hardhat --network hardhat deploy:L1:local
+npm install
+npx hardhat run scripts/generate-artifacts.ts
+
+npx hardhat --network localhost deploy:L1:local
+```
+
+## Deploy contracts of oasys-genesis-contract
+Move to [oasys-genesis-contract](https://github.com/oasysgames/oasys-genesis-contract).
+
+```shell
+# set address deployed with optimism L1 contracts
+npx hardhat --network localhost deploy:local --l1-build-deposit `YOUR l1BuildDepositAddress`
 ```
 
 ## Build Verse
 According to the following page, please build verse.
 
-[Manual for Building Verse](https://docs.oasys.games/docs/verse-developer/how-to-build-verse/1-2-manual)
+[Manual for Building Verse](https://docs.oasys.games/docs/verse-developer/how-to-build-verse/1-2-manual).
+
+You can build web page at local to build verse with [oasys-pos-fe](https://github.com/oasysgames/oasys-pos-fe).
+```shell
+git clone git@github.com:oasysgames/oasys-pos-fe.git
+yarn
+yarn dev
+```
 
 When building verse, You have to set verse to access to Local Oasys L1.
 

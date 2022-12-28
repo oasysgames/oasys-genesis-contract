@@ -13,7 +13,6 @@ import {
   NFT_BRIDGE_MAINCHAIN_ADDRESS, 
   NFT_BRIDGE_RELAYER_ADDRESS, 
   NFT_BRIDGE_SIDECHAIN_ADDRESS, 
-  L1_BUILD_DEPOSIT_ADDRESS,
 } from '../consts';
 
 subtask('deploy:nft-bridge')
@@ -174,10 +173,21 @@ subtask('deploy:mainContract')
   );
   
 task('deploy:local')
+  .addParam(
+    'l1BuildDeposit',
+    'l1BuildDeposit_ADDRESS',
+    '',
+    types.string
+  )
   .setAction(
-    async (taskArgs, hre) => {
+    async (taskArgs:
+      {
+        l1BuildDeposit: string;
+      },
+      hre
+    ) => {
       const sOASTransferAllowListString = [
-        L1_BUILD_DEPOSIT_ADDRESS
+        taskArgs.l1BuildDeposit
       ].join(',');
       await hre.run("deploy:nft-bridge");
       await hre.run("deploy:token", { sOASTransferAllowListString: sOASTransferAllowListString });
