@@ -20,7 +20,7 @@ npm run build
 npm run test
 ```
 
-# Setup(localhost oasys-hub-layer)
+# Setup(localhost)
 This setup is for developers of [oasys-genesis-contract](https://github.com/oasysgames/oasys-genesis-contract) and oasys-optimism's [oasys-contract](https://github.com/oasysgames/oasys-optimism/tree/develop/packages/contracts).
 
 ## Build node
@@ -57,6 +57,14 @@ You can build web page at local to build verse with [oasys-pos-fe](https://githu
 git clone git@github.com:oasysgames/oasys-pos-fe.git
 yarn
 yarn dev
+```
+
+You have to set optimism L1 contracts address to oasys-pos-fe.
+Please set address gotten when deploying optimism L1 contracts.
+```typescript
+// src/config/index.ts
+export const L1BuildDepositAddress = '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853';
+export const L1BuildAgentAddress = '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6';
 ```
 
 When building verse, You have to set verse to access to Local Oasys L1.
