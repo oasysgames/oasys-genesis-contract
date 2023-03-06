@@ -25,7 +25,9 @@ contract OASMultiTransfer {
             if (!transferSucceeded) revert TransferFailed();
         }
 
-        (bool refundSucceeded, ) = msg.sender.call{ value: address(this).balance }("");
-        if (!refundSucceeded) revert TransferFailed();
+        if (address(this).balance != 0) {
+            (bool refundSucceeded, ) = msg.sender.call{ value: address(this).balance }("");
+            if (!refundSucceeded) revert TransferFailed();
+        }
     }
 }
