@@ -5,7 +5,7 @@ pragma solidity 0.8.12;
 error InvalidArgument();
 
 // OAS transfer failed.
-error TransferFailed();
+error TransferFailed(address to);
 
 /**
  * @title OASMultiTransfer
@@ -22,12 +22,12 @@ contract OASMultiTransfer {
 
         for (uint256 i = 0; i < tos.length; i++) {
             (bool transferSucceeded, ) = tos[i].call{ value: amounts[i] }("");
-            if (!transferSucceeded) revert TransferFailed();
+            if (!transferSucceeded) revert TransferFailed(tos[i]);
         }
 
         if (address(this).balance != 0) {
             (bool refundSucceeded, ) = msg.sender.call{ value: address(this).balance }("");
-            if (!refundSucceeded) revert TransferFailed();
+            if (!refundSucceeded) revert TransferFailed(msg.sender);
         }
     }
 }
