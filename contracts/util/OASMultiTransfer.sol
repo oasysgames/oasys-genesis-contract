@@ -21,13 +21,16 @@ contract OASMultiTransfer {
         if (tos.length != amounts.length) revert InvalidArgument();
 
         for (uint256 i = 0; i < tos.length; i++) {
+            if (tos[i] == address(0)) continue;
+            if (amounts[i] == 0) continue;
+
             (bool transferSucceeded, ) = tos[i].call{ value: amounts[i] }("");
             if (!transferSucceeded) revert TransferFailed(tos[i], amounts[i]);
         }
 
-        if (address(this).balance != 0) {
-            (bool refundSucceeded, ) = msg.sender.call{ value: address(this).balance }("");
-            if (!refundSucceeded) revert TransferFailed(msg.sender, address(this).balance);
-        }
+        if (address(this).balance == 0) return;
+
+        (bool refundSucceeded, ) = msg.sender.call{ value: address(this).balance }("");
+        if (!refundSucceeded) revert TransferFailed(msg.sender, address(this).balance);
     }
 }
