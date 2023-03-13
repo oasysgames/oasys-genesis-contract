@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from 'hardhat/types'
 import '@nomiclabs/hardhat-waffle'
 import 'solidity-coverage'
+import './tasks'
 
 const config: HardhatUserConfig = {
   solidity: {

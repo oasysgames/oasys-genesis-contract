@@ -11,11 +11,13 @@ import {
   mining,
   zeroAddress,
   Token,
-  WOASAddress,
-  SOASAddress,
   TestERC20Bytecode,
   toBNWei,
 } from './helpers'
+import {
+  SOAS_ADDRESS,
+  WOAS_ADDRESS,
+} from '../consts';
 
 const initialEnv: EnvironmentValue = {
   startBlock: 0,
@@ -168,8 +170,8 @@ describe('StakeManager', () => {
   beforeEach(async () => {
     await network.provider.send('hardhat_reset')
     await network.provider.send('hardhat_setCoinbase', [accounts[0].address])
-    await network.provider.send('hardhat_setCode', [WOASAddress, TestERC20Bytecode])
-    await network.provider.send('hardhat_setCode', [SOASAddress, TestERC20Bytecode])
+    await network.provider.send('hardhat_setCode', [WOAS_ADDRESS, TestERC20Bytecode])
+    await network.provider.send('hardhat_setCode', [SOAS_ADDRESS, TestERC20Bytecode])
 
     environment = await (await ethers.getContractFactory('Environment')).connect(deployer).deploy()
     allowlist = await (await ethers.getContractFactory('Allowlist')).connect(deployer).deploy()
@@ -190,8 +192,8 @@ describe('StakeManager', () => {
     staker6 = new Staker(stakeManager, accounts[16])
     stakers = [staker1, staker2, staker3, staker4, staker5, staker6]
 
-    woas = (await ethers.getContractFactory('TestERC20')).attach(WOASAddress)
-    soas = (await ethers.getContractFactory('TestERC20')).attach(SOASAddress)
+    woas = (await ethers.getContractFactory('TestERC20')).attach(WOAS_ADDRESS)
+    soas = (await ethers.getContractFactory('TestERC20')).attach(SOAS_ADDRESS)
     await Promise.all(
       stakers.map(
         (x) =>

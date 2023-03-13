@@ -28,5 +28,8 @@
     "ts-node": "^10.7.0",
     "typescript": "^4.6.3",
     "web3": "^1.7.4"
+  },
+  "dependencies": {
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.7"
   }
 }
