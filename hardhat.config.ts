@@ -3,6 +3,8 @@ import '@nomicfoundation/hardhat-toolbox'
 import '@nomiclabs/hardhat-waffle'
 import 'solidity-coverage'
 
+import './tasks/output-candidate-manager'
+
 const config: HardhatUserConfig = {
   solidity: {
     compilers: [
