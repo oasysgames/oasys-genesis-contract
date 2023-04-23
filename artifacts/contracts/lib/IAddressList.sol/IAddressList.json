@@ -1,0 +1,212 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IAddressList",
+  "sourceName": "contracts/lib/IAddressList.sol",
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "_address",
+          "type": "address"
+        }
+      ],
+      "name": "Added",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "_address",
+          "type": "address"
+        }
+      ],
+      "name": "Removed",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_address",
+          "type": "address"
+        }
+      ],
+      "name": "add",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "result",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address[]",
+          "name": "addresses",
+          "type": "address[]"
+        }
+      ],
+      "name": "adds",
+      "outputs": [
+        {
+          "internalType": "bool[]",
+          "name": "results",
+          "type": "bool[]"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_address",
+          "type": "address"
+        }
+      ],
+      "name": "has",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "length",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "cursor",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "howMany",
+          "type": "uint256"
+        }
+      ],
+      "name": "list",
+      "outputs": [
+        {
+          "internalType": "address[]",
+          "name": "addresses",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint256",
+          "name": "newCursor",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_address",
+          "type": "address"
+        }
+      ],
+      "name": "next",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_address",
+          "type": "address"
+        }
+      ],
+      "name": "prev",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_address",
+          "type": "address"
+        }
+      ],
+      "name": "remove",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "result",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address[]",
+          "name": "addresses",
+          "type": "address[]"
+        }
+      ],
+      "name": "removes",
+      "outputs": [
+        {
+          "internalType": "bool[]",
+          "name": "results",
+          "type": "bool[]"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
