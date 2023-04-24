@@ -10,6 +10,8 @@ import { UpdateHistories } from "./lib/UpdateHistories.sol";
 import { Validator as ValidatorLib } from "./lib/Validator.sol";
 import { Staker as StakerLib } from "./lib/Staker.sol";
 import { Token } from "./lib/Token.sol";
+import { ICandidateValidatorManager } from "./ICandidateValidatorManager.sol";
+import { UnauthorizedSender } from "./lib/Errors.sol";
 
 // Only executable in the first block of epoch.
 error OnlyFirstBlock();
@@ -25,9 +27,6 @@ error ValidatorDoesNotExist();
 
 // Staker does not exist.
 error StakerDoesNotExist();
-
-// Unauthorized transaction sender.
-error UnauthorizedSender();
 
 // Unauthorized validator.
 error UnauthorizedValidator();
@@ -52,15 +51,11 @@ contract StakeManager is IStakeManager, System {
     using StakerLib for Staker;
 
     /*************
-     * Constants *
+     * Variables *
      *************/
 
     IEnvironment public environment;
     IAllowlist public allowlist;
-
-    /*************
-     * Variables *
-     *************/
 
     // Stake updated epochs
     uint256[] public stakeUpdates;
@@ -74,6 +69,8 @@ contract StakeManager is IStakeManager, System {
     // List of stakers
     mapping(address => Staker) public stakers;
     address[] public stakerSigners;
+    // A contract that manages candidate validators
+    ICandidateValidatorManager public candidateManager;
 
     /*************
      * Modifiers *
@@ -302,6 +299,8 @@ contract StakeManager is IStakeManager, System {
         _staker.lockedUnstakes.push(LockedUnstake(token, amount, block.timestamp + 10 days));
         stakeUpdates.sub(stakeAmounts, environment.epoch() + 1, amount);
 
+        candidateManager.afterStakeUpdate(validator);
+
         emit UnstakedV2(msg.sender, validator, _staker.lockedUnstakes.length - 1);
     }
 
@@ -382,28 +381,7 @@ contract StakeManager is IStakeManager, System {
             uint256 newCursor
         )
     {
-        uint256 currentEpoch = environment.epoch();
-        epoch = epoch > 0 ? epoch : currentEpoch;
-        IEnvironment.EnvironmentValue memory env = environment.findValue(epoch);
-
-        (howMany, newCursor) = _pagination(cursor, howMany, validatorOwners.length);
-        owners = new address[](howMany);
-        operators = new address[](howMany);
-        stakes = new uint256[](howMany);
-        candidates = new bool[](howMany);
-
-        for (uint256 i = 0; i < howMany; i++) {
-            Validator storage validator = validators[validatorOwners[cursor + i]];
-            owners[i] = validator.owner;
-            operators[i] = validator.operator;
-            stakes[i] = validator.getTotalStake(epoch);
-            candidates[i] =
-                !validator.isInactive(epoch) &&
-                !validator.isJailed(epoch) &&
-                stakes[i] >= env.validatorThreshold;
-        }
-
-        return (owners, operators, stakes, candidates, newCursor);
+        (owners, operators, , , stakes, candidates, newCursor) = candidateManager.getAll(epoch, cursor, howMany);
     }
 
     /**
@@ -444,25 +422,18 @@ contract StakeManager is IStakeManager, System {
     function getValidatorInfo(address validator, uint256 epoch)
         external
         view
-        returns (
-            address operator,
-            bool active,
-            bool jailed,
-            bool candidate,
-            uint256 stakes
-        )
+        returns (address operator, bool active, bool jailed, bool candidate, uint256 stakes)
     {
-        uint256 currentEpoch = environment.epoch();
-        epoch = epoch > 0 ? epoch : currentEpoch;
-        IEnvironment.EnvironmentValue memory env = environment.findValue(epoch);
+        if (epoch == 0) epoch = environment.epoch();
 
         Validator storage _validator = validators[validator];
+        operator = _validator.operator;
         active = !_validator.isInactive(epoch);
         jailed = _validator.isJailed(epoch);
         stakes = _validator.getTotalStake(epoch);
-        candidate = active && !jailed && stakes >= env.validatorThreshold;
+        candidate = active && !jailed && stakes >= environment.findValue(epoch).validatorThreshold;
 
-        return (_validator.operator, active, jailed, candidate, stakes);
+        return (operator, active, jailed, candidate, stakes);
     }
 
     /**
@@ -732,5 +703,7 @@ contract StakeManager is IStakeManager, System {
         _staker.stake(epoch, validators[validator], token, amount);
 
         stakeUpdates.add(stakeAmounts, epoch, amount);
+
+        candidateManager.afterStakeUpdate(validator);
     }
 }

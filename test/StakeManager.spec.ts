@@ -4,6 +4,10 @@ import { SignerWithAddress as Account } from '@nomiclabs/hardhat-ethers/signers'
 import { toWei, fromWei } from 'web3-utils'
 import { expect } from 'chai'
 
+import type { Environment, StakeManager, CandidateValidatorManager } from '../typechain-types/contracts'
+import type { Allowlist } from '../typechain-types/contracts/lib'
+import type { TestERC20 } from '../typechain-types/contracts/test'
+
 import {
   EnvironmentValue,
   Validator,
@@ -33,11 +37,12 @@ const gasPrice = 0
 
 describe('StakeManager', () => {
   let accounts: Account[]
-  let stakeManager: Contract
-  let environment: Contract
-  let allowlist: Contract
-  let woas: Contract
-  let soas: Contract
+  let stakeManager: StakeManager
+  let environment: Environment
+  let allowlist: Allowlist
+  let candidateManager: CandidateValidatorManager
+  let woas: TestERC20
+  let soas: TestERC20
 
   let deployer: Account
 
@@ -79,18 +84,70 @@ describe('StakeManager', () => {
     howMany = 100,
     expNewCursor?: number,
   ) => {
-    const { owners, operators, stakes, candidates, newCursor } = await stakeManager.getValidators(
-      epoch,
-      cursor,
-      howMany,
-    )
-    expect(owners).to.eql(expValidators.map((x) => x.owner.address))
-    expect(operators).to.eql(expValidators.map((x) => x.operator.address))
-    expect(candidates).to.eql(expCandidates)
-    if (expStakes) {
-      expect(stakes.map((x: any) => fromWei(x.toString()))).to.eql(expStakes)
+    const res = await stakeManager.getValidators(epoch, cursor, howMany)
+    _expectValidators({
+      ...res,
+      expValidators,
+      expCandidates,
+      expStakes,
+      expNewCursor,
+    })
+  }
+
+  const expectCurrentCandidateValidators = async (
+    expValidators: Validator[],
+    expCandidates: boolean[],
+    expStakes?: string[],
+    cursor = 0,
+    howMany = 100,
+    expNewCursor?: number,
+  ) => {
+    const res = await candidateManager.getHighStakes(await getEpoch(), cursor, howMany)
+    _expectValidators({
+      ...res,
+      expValidators,
+      expCandidates,
+      expStakes,
+      expNewCursor,
+    })
+  }
+
+  const expectNextCandidateValidators = async (
+    expValidators: Validator[],
+    expCandidates: boolean[],
+    expStakes?: string[],
+    cursor = 0,
+    howMany = 100,
+    expNewCursor?: number,
+  ) => {
+    const res = await candidateManager.getHighStakes(await getEpoch(1), cursor, howMany)
+    _expectValidators({
+      ...res,
+      expValidators,
+      expCandidates,
+      expStakes,
+      expNewCursor,
+    })
+  }
+
+  const _expectValidators = (params: {
+    owners: string[]
+    operators: string[]
+    stakes: BigNumber[]
+    candidates: boolean[]
+    newCursor: BigNumber
+    expValidators: Validator[]
+    expCandidates: boolean[]
+    expStakes?: string[]
+    expNewCursor?: number
+  }) => {
+    expect(params.owners).to.eql(params.expValidators.map((x) => x.owner.address))
+    expect(params.operators).to.eql(params.expValidators.map((x) => x.operator.address))
+    expect(params.candidates).to.eql(params.expCandidates)
+    if (params.expStakes) {
+      expect(params.stakes.map((x: any) => fromWei(x.toString()))).to.eql(params.expStakes)
     }
-    expect(newCursor).to.equal(expNewCursor ?? owners.length)
+    expect(params.newCursor).to.equal(params.expNewCursor ?? params.owners.length)
   }
 
   const expectBalance = async (
@@ -111,11 +168,6 @@ describe('StakeManager', () => {
     await allowlist.connect(deployer).addAddress(validator.owner.address, { gasPrice })
   }
 
-  const initializeContracts = async () => {
-    await environment.initialize(initialEnv, { gasPrice })
-    await stakeManager.initialize(environment.address, allowlist.address, { gasPrice })
-  }
-
   const initializeValidators = async () => {
     await Promise.all(validators.map((x) => allowAddress(x)))
     await Promise.all(validators.map((x) => x.joinValidator()))
@@ -123,7 +175,6 @@ describe('StakeManager', () => {
   }
 
   const initialize = async () => {
-    await initializeContracts()
     await initializeValidators()
   }
 
@@ -132,8 +183,8 @@ describe('StakeManager', () => {
     await mining(currentBlock)
   }
 
-  const getEpoch = async (incr: number): Promise<number> => {
-    return (await environment.epoch()).toNumber() + incr
+  const getEpoch = async (incr?: number): Promise<number> => {
+    return (await environment.epoch()).toNumber() + (incr ?? 0)
   }
 
   const setCoinbase = async (address: string) => {
@@ -153,7 +204,7 @@ describe('StakeManager', () => {
   const slash = async (validator: Validator, target: Validator, count: number) => {
     const env = await environment.value()
     const { operators, candidates } = await stakeManager.getValidators(await getEpoch(0), 0, 100)
-    const blocks = ~~(env.epochPeriod / operators.filter((_: any, i: number) => candidates[i]).length)
+    const blocks = ~~(env.epochPeriod.toNumber() / operators.filter((_: any, i: number) => candidates[i]).length)
 
     const restoreCoinbase = await setCoinbase(validator.operator.address)
     await Promise.all([...Array(count).keys()].map((_) => validator.slash(target, blocks)))
@@ -165,16 +216,74 @@ describe('StakeManager', () => {
     deployer = accounts[0]
   })
 
+  // setup the test network
   beforeEach(async () => {
+    currentBlock = 0
+
     await network.provider.send('hardhat_reset')
-    await network.provider.send('hardhat_setCoinbase', [accounts[0].address])
     await network.provider.send('hardhat_setCode', [WOASAddress, TestERC20Bytecode])
     await network.provider.send('hardhat_setCode', [SOASAddress, TestERC20Bytecode])
 
-    environment = await (await ethers.getContractFactory('Environment')).connect(deployer).deploy()
-    allowlist = await (await ethers.getContractFactory('Allowlist')).connect(deployer).deploy()
-    stakeManager = await (await ethers.getContractFactory('StakeManager')).connect(deployer).deploy()
+    // setup for the onlyCoinbase modifier
+    await network.provider.send('hardhat_setCoinbase', [deployer.address])
+  })
 
+  // deploy the Environment contract
+  beforeEach(async () => {
+    const factory = await ethers.getContractFactory('Environment')
+    environment = await factory.connect(deployer).deploy()
+    await environment.initialize(initialEnv, { gasPrice })
+  })
+
+  // deploy the Allowlist contract
+  beforeEach(async () => {
+    const factory = await ethers.getContractFactory('Allowlist')
+    allowlist = await factory.connect(deployer).deploy()
+  })
+
+  // deploy the StakeManager contract
+  beforeEach(async () => {
+    const factory = await ethers.getContractFactory('StakeManager')
+    stakeManager = await factory.connect(deployer).deploy()
+  })
+
+  // deploy the CandidateValidatorManager contract
+  beforeEach(async () => {
+    const addrListFactory = await ethers.getContractFactory('AddressList')
+    const candidateManagerFactory = await ethers.getContractFactory('CandidateValidatorManager')
+
+    const addrList = await addrListFactory.connect(deployer).deploy()
+    candidateManager = await candidateManagerFactory
+      .connect(deployer)
+      .deploy(environment.address, stakeManager.address, addrList.address)
+
+    await addrList.transferOwnership(candidateManager.address)
+  })
+
+  // set the addresses of dependent contracts in the StakeManager
+  beforeEach(async () => {
+    const pad = (s: string, len = 32) => ethers.utils.hexZeroPad(s, len)
+
+    const storages = [
+      ['0x0', pad(environment.address, 31) + '01'], // combined value of the `bool public initialized`
+      ['0x1', pad(allowlist.address)],
+      ['0x9', pad(candidateManager.address)],
+    ]
+
+    await Promise.all(
+      storages.map(([slot, value]) =>
+        network.provider.send('hardhat_setStorageAt', [stakeManager.address, slot, value]),
+      ),
+    )
+
+    expect(await stakeManager.initialized()).to.be.true
+    expect(await stakeManager.environment()).to.equal(environment.address)
+    expect(await stakeManager.allowlist()).to.equal(allowlist.address)
+    expect(await stakeManager.candidateManager()).to.equal(candidateManager.address)
+  })
+
+  // setup validators and delegates
+  beforeEach(async () => {
     validator1 = new Validator(stakeManager, accounts[1], accounts[2])
     validator2 = new Validator(stakeManager, accounts[3], accounts[4])
     validator3 = new Validator(stakeManager, accounts[5], accounts[6])
@@ -189,7 +298,10 @@ describe('StakeManager', () => {
     staker5 = new Staker(stakeManager, accounts[15])
     staker6 = new Staker(stakeManager, accounts[16])
     stakers = [staker1, staker2, staker3, staker4, staker5, staker6]
+  })
 
+  // mint WOAS and SOAS to delegates
+  beforeEach(async () => {
     woas = (await ethers.getContractFactory('TestERC20')).attach(WOASAddress)
     soas = (await ethers.getContractFactory('TestERC20')).attach(SOASAddress)
     await Promise.all(
@@ -205,13 +317,6 @@ describe('StakeManager', () => {
           }),
       ),
     )
-
-    currentBlock = 0
-  })
-
-  it('initialize()', async () => {
-    await initialize()
-    await expect(initialize()).to.revertedWith('AlreadyInitialized()')
   })
 
   it('addRewardBalance()', async () => {
@@ -242,7 +347,6 @@ describe('StakeManager', () => {
 
     beforeEach(async () => {
       validator = new Validator(stakeManager, owner, operator)
-      await initializeContracts()
     })
 
     it('joinValidator()', async () => {
@@ -1522,84 +1626,203 @@ describe('StakeManager', () => {
     })
 
     it('getValidators()', async () => {
-      await expectCurrentValidators(validators, [false, false, false, false, false], ['0', '0', '0', '0', '0'])
-      await expectNextValidators(validators, [false, false, false, false, true], ['0', '0', '0', '0', '500'])
+      const [o, x] = [true, false]
+
+      await expectCurrentValidators(validators, [x, x, x, x, x], ['0', '0', '0', '0', '0'])
+      await expectNextValidators(validators, [x, x, x, x, o], ['0', '0', '0', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator], [x], ['0'])
+      await expectNextCandidateValidators([fixedValidator], [o], ['500'])
 
       await staker1.stake(Token.OAS, validator1, '501')
       await staker1.stake(Token.OAS, validator2, '499')
       await staker1.stake(Token.OAS, validator3, '502')
 
-      await expectCurrentValidators(validators, [false, false, false, false, false], ['0', '0', '0', '0', '0'])
-      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectCurrentValidators(validators, [x, x, x, x, x], ['0', '0', '0', '0', '0'])
+      await expectNextValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator3], [x, x, x], ['0', '0', '0'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
 
       await toNextEpoch()
 
-      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
-      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectCurrentValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
 
       await validator1.deactivateValidator([await getEpoch(1)])
 
-      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
-      await expectNextValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectCurrentValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [x, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator3], [o, x, o], ['500', '501', '502'])
 
       await toNextEpoch()
 
-      await expectCurrentValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
-      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectCurrentValidators(validators, [x, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator3], [o, x, o], ['500', '501', '502'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
 
       await toNextEpoch()
 
-      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
-      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectCurrentValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
 
       await slash(validator1, validator1, 50)
 
-      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
-      await expectNextValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectCurrentValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [x, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator3], [o, x, o], ['500', '501', '502'])
 
       await toNextEpoch()
 
-      await expectCurrentValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
-      await expectNextValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectCurrentValidators(validators, [x, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [x, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator3], [o, x, o], ['500', '501', '502'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator3], [o, x, o], ['500', '501', '502'])
 
       await toNextEpoch()
 
-      await expectCurrentValidators(validators, [false, false, true, false, true], ['501', '499', '502', '0', '500'])
-      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectCurrentValidators(validators, [x, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator3], [o, x, o], ['500', '501', '502'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
 
       await toNextEpoch()
 
-      await expectCurrentValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
-      await expectNextValidators(validators, [true, false, true, false, true], ['501', '499', '502', '0', '500'])
+      await expectCurrentValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectNextValidators(validators, [o, x, o, x, o], ['501', '499', '502', '0', '500'])
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator3], [o, o, o], ['500', '501', '502'])
 
       // check pagination
       // howMany = 2
-      await expectValidators(await getEpoch(0), [validator1, validator2], [true, false], ['501', '499'], 0, 2, 2)
-      await expectValidators(await getEpoch(0), [validator3, validator4], [true, false], ['502', '0'], 2, 2, 4)
-      await expectValidators(await getEpoch(0), [fixedValidator], [true], ['500'], 4, 2, 5)
+      await expectValidators(await getEpoch(0), [validator1, validator2], [o, x], ['501', '499'], 0, 2, 2)
+      await expectValidators(await getEpoch(0), [validator3, validator4], [o, x], ['502', '0'], 2, 2, 4)
+      await expectValidators(await getEpoch(0), [fixedValidator], [o], ['500'], 4, 2, 5)
 
       // howMany = 4
       await expectValidators(
         await getEpoch(0),
         [validator1, validator2, validator3, validator4],
-        [true, false, true, false],
+        [o, x, o, x],
         ['501', '499', '502', '0'],
         0,
         4,
         4,
       )
-      await expectValidators(await getEpoch(0), [fixedValidator], [true], ['500'], 4, 2, 5)
+      await expectValidators(await getEpoch(0), [fixedValidator], [o], ['500'], 4, 2, 5)
 
       // howMany = 10
       await expectValidators(
         await getEpoch(0),
         [validator1, validator2, validator3, validator4, fixedValidator],
-        [true, false, true, false, true],
+        [o, x, o, x, o],
         ['501', '499', '502', '0', '500'],
         0,
         10,
         5,
       )
+    })
+
+    it('getHighStakeValidators()', async () => {
+      const [o, x] = [true, false]
+
+      await expectCurrentCandidateValidators([fixedValidator], [x], ['0'])
+      await expectNextCandidateValidators([fixedValidator], [o], ['500'])
+
+      await staker1.stake(Token.OAS, validator1, '550')
+      await staker1.stake(Token.OAS, validator2, '450')
+
+      await expectCurrentCandidateValidators([fixedValidator, validator1], [x, x], ['0', '0'])
+      await expectNextCandidateValidators([fixedValidator, validator1], [o, o], ['500', '550'])
+
+      await staker1.stake(Token.OAS, validator2, '150')
+
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator2], [x, x, x], ['0', '0', '0'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator2], [o, o, o], ['500', '550', '600'])
+
+      await staker1.unstakeV2(Token.OAS, validator1, '50')
+
+      await expectCurrentCandidateValidators([fixedValidator, validator1, validator2], [x, x, x], ['0', '0', '0'])
+      await expectNextCandidateValidators([fixedValidator, validator1, validator2], [o, o, o], ['500', '500', '600'])
+
+      await staker1.unstakeV2(Token.OAS, validator1, '1')
+
+      await expectCurrentCandidateValidators([fixedValidator, validator2], [x, x], ['0', '0'])
+      await expectNextCandidateValidators([fixedValidator, validator2], [o, o], ['500', '600'])
+
+      await staker1.stake(Token.OAS, validator1, '51')
+
+      await expectCurrentCandidateValidators([fixedValidator, validator2, validator1], [x, x, x], ['0', '0', '0'])
+      await expectNextCandidateValidators([fixedValidator, validator2, validator1], [o, o, o], ['500', '600', '550'])
+
+      await toNextEpoch()
+
+      await fixedValidator.unstakeV2(Token.OAS, fixedValidator, '1')
+
+      await expectCurrentCandidateValidators([fixedValidator, validator2, validator1], [o, o, o], ['500', '600', '550'])
+      await expectNextCandidateValidators([fixedValidator, validator2, validator1], [x, o, o], ['499', '600', '550'])
+
+      await fixedValidator.unstakeV2(Token.OAS, fixedValidator, '1')
+
+      await expectCurrentCandidateValidators([fixedValidator, validator2, validator1], [o, o, o], ['500', '600', '550'])
+      await expectNextCandidateValidators([fixedValidator, validator2, validator1], [x, o, o], ['498', '600', '550'])
+
+      await toNextEpoch()
+
+      await fixedValidator.unstakeV2(Token.OAS, fixedValidator, '1')
+
+      await expectCurrentCandidateValidators([validator1, validator2], [o, o], ['550', '600'])
+      await expectNextCandidateValidators([validator1, validator2], [o, o], ['550', '600'])
+
+      await fixedValidator.stake(Token.OAS, fixedValidator, '1')
+
+      await expectCurrentCandidateValidators([validator1, validator2], [o, o], ['550', '600'])
+      await expectNextCandidateValidators([validator1, validator2], [o, o], ['550', '600'])
+
+      await fixedValidator.stake(Token.OAS, fixedValidator, '1')
+
+      await expectCurrentCandidateValidators([validator1, validator2], [o, o], ['550', '600'])
+      await expectNextCandidateValidators([validator1, validator2], [o, o], ['550', '600'])
+
+      await fixedValidator.stake(Token.OAS, fixedValidator, '1')
+
+      await expectCurrentCandidateValidators([validator1, validator2, fixedValidator], [o, o, x], ['550', '600', '498'])
+      await expectNextCandidateValidators([validator1, validator2, fixedValidator], [o, o, o], ['550', '600', '500'])
+
+      await fixedValidator.unstakeV2(Token.OAS, fixedValidator, '1')
+
+      await expectCurrentCandidateValidators([validator1, validator2], [o, o], ['550', '600'])
+      await expectNextCandidateValidators([validator1, validator2], [o, o], ['550', '600'])
+
+      await fixedValidator.stake(Token.OAS, fixedValidator, '1')
+
+      await expectCurrentCandidateValidators([validator1, validator2, fixedValidator], [o, o, x], ['550', '600', '498'])
+      await expectNextCandidateValidators([validator1, validator2, fixedValidator], [o, o, o], ['550', '600', '500'])
+
+      await toNextEpoch()
+
+      await staker1.unstakeV2(Token.OAS, validator1, '51')
+      await fixedValidator.unstakeV2(Token.OAS, fixedValidator, '1')
+
+      await expectCurrentCandidateValidators([validator1, validator2, fixedValidator], [o, o, o], ['550', '600', '500'])
+      await expectNextCandidateValidators([validator1, validator2, fixedValidator], [x, o, x], ['499', '600', '499'])
+
+      await staker1.stake(Token.OAS, validator2, '1')
+
+      await expectCurrentCandidateValidators([validator1, validator2, fixedValidator], [o, o, o], ['550', '600', '500'])
+      await expectNextCandidateValidators([validator1, validator2, fixedValidator], [x, o, x], ['499', '601', '499'])
+
+      await toNextEpoch()
+
+      await staker1.stake(Token.OAS, validator2, '1')
+
+      await expectCurrentCandidateValidators([validator2], [o], ['601'])
+      await expectNextCandidateValidators([validator2], [o], ['602'])
     })
 
     it('getValidatorOwners()', async () => {

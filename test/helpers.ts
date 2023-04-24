@@ -252,6 +252,10 @@ const fromEther = (ether: string) => BigNumber.from(toWei(ether))
 
 const toBNWei = (ether: string) => BigNumber.from(toWei(ether))
 
+const ntoa = (n: number): string => {
+  return ethers.utils.getAddress(ethers.utils.hexZeroPad(BigNumber.from(n).toHexString(), 20))
+}
+
 const makeSignature = async (signer: Account, hash: string, chainid: number, expiration: number): Promise<string> => {
   const values = [
     { type: 'uint256', value: String(chainid) },
@@ -325,6 +329,7 @@ export {
   mining,
   fromEther,
   toBNWei,
+  ntoa,
   makeSignature,
   makeHashWithNonce,
   makeExpiration,

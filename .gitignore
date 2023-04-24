@@ -5,8 +5,11 @@
 /artifacts/@openzeppelin
 /coverage
 /coverage.json
+/typechain
+/typechain-types
 
 .DS_Store
 .vscode
 .env
 .envrc
+.node-version
