@@ -173,9 +173,6 @@ contract StakeManager is IStakeManager, System {
      */
     function joinValidator(address operator) external {
         address owner = msg.sender;
-        if (!allowlist.containsAddress(owner)) {
-            revert UnauthorizedValidator();
-        }
 
         validators[owner].join(operator);
         validatorOwners.push(owner);

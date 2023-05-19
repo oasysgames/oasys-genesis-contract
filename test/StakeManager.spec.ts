@@ -164,12 +164,7 @@ describe('StakeManager', () => {
     expect(actualSOAS).to.match(new RegExp(`^${expectSOAS}`))
   }
 
-  const allowAddress = async (validator: Validator) => {
-    await allowlist.connect(deployer).addAddress(validator.owner.address, { gasPrice })
-  }
-
   const initializeValidators = async () => {
-    await Promise.all(validators.map((x) => allowAddress(x)))
     await Promise.all(validators.map((x) => x.joinValidator()))
     await fixedValidator.stake(Token.OAS, fixedValidator, '500')
   }
@@ -351,11 +346,6 @@ describe('StakeManager', () => {
 
     it('joinValidator()', async () => {
       let tx = validator.joinValidator(zeroAddress)
-      await expect(tx).to.revertedWith('UnauthorizedValidator()')
-
-      await allowAddress(validator)
-
-      tx = validator.joinValidator(zeroAddress)
       await expect(tx).to.revertedWith('EmptyAddress()')
 
       tx = validator.joinValidator(owner.address)
@@ -372,7 +362,6 @@ describe('StakeManager', () => {
     it('updateOperator()', async () => {
       const newOperator = accounts[accounts.length - 3]
 
-      await allowAddress(validator)
       await validator.joinValidator()
 
       let tx = validator.updateOperator(zeroAddress)
@@ -397,7 +386,6 @@ describe('StakeManager', () => {
     })
 
     it('deactivateValidator() and activateValidator()', async () => {
-      await allowAddress(validator)
       await validator.joinValidator()
       await staker1.stake(Token.OAS, validator, '500')
 
@@ -508,7 +496,6 @@ describe('StakeManager', () => {
     })
 
     it('claimCommissions()', async () => {
-      await allowAddress(validator)
       await validator.joinValidator()
       await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 50 })
 
@@ -533,7 +520,6 @@ describe('StakeManager', () => {
     })
 
     it('restakeCommissions()', async () => {
-      await allowAddress(validator)
       await validator.joinValidator()
       await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
       await toNextEpoch()
