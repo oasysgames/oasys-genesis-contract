@@ -38,6 +38,8 @@ error Locked();
 
 error AlreadyClaimed();
 
+error AlreadyInUse();
+
 error ObsoletedMethod();
 
 /**
@@ -174,6 +176,10 @@ contract StakeManager is IStakeManager, System {
     function joinValidator(address operator) external {
         address owner = msg.sender;
 
+        if (operatorToOwner[operator] != address(0)) {
+            revert AlreadyInUse();
+        }
+
         validators[owner].join(operator);
         validatorOwners.push(owner);
         operatorToOwner[operator] = owner;
@@ -186,6 +192,10 @@ contract StakeManager is IStakeManager, System {
      */
     function updateOperator(address operator) external validatorExists(msg.sender) {
         address owner = msg.sender;
+
+        if (operatorToOwner[operator] != address(0)) {
+            revert AlreadyInUse();
+        }
 
         Validator storage validator = validators[owner];
         address oldOperator = validator.operator;
