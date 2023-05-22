@@ -344,19 +344,36 @@ describe('StakeManager', () => {
       validator = new Validator(stakeManager, owner, operator)
     })
 
-    it('joinValidator()', async () => {
-      let tx = validator.joinValidator(zeroAddress)
-      await expect(tx).to.revertedWith('EmptyAddress()')
+    describe('joinValidator()', () => {
+      let attackerv: Validator
 
-      tx = validator.joinValidator(owner.address)
-      await expect(tx).to.revertedWith('SameAsOwner()')
+      beforeEach(async () => {
+        attackerv = new Validator(stakeManager, attacker, operator)
 
-      await expect(await validator.joinValidator())
-        .to.emit(stakeManager, 'ValidatorJoined')
-        .withArgs(validator.owner.address)
+        await expect(await validator.joinValidator())
+          .to.emit(stakeManager, 'ValidatorJoined')
+          .withArgs(validator.owner.address)
+      })
 
-      tx = validator.joinValidator()
-      await expect(tx).to.revertedWith('AlreadyJoined()')
+      it('should revert when already joined', async () => {
+        const tx = validator.joinValidator('0x0000000000000000000000000000000000000001')
+        await expect(tx).to.revertedWith('AlreadyJoined()')
+      })
+
+      it('should revert when operator address is zero', async () => {
+        const tx = attackerv.joinValidator(zeroAddress)
+        await expect(tx).to.revertedWith('EmptyAddress()')
+      })
+
+      it('should revert when operator address asme as owner address', async () => {
+        const tx = attackerv.joinValidator(attacker.address)
+        await expect(tx).to.revertedWith('SameAsOwner()')
+      })
+
+      it('should revert when operator address is already in use', async () => {
+        const tx = attackerv.joinValidator(operator.address)
+        await expect(tx).to.revertedWith('AlreadyInUse()')
+      })
     })
 
     it('updateOperator()', async () => {
