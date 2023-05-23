@@ -26,6 +26,7 @@ contract OASMultiTransfer is ReentrancyGuard {
             if (tos[i] == address(0)) continue;
             if (amounts[i] == 0) continue;
 
+            // Ignore the possibility of gas-griefing attack.
             (bool transferSucceeded, ) = tos[i].call{ value: amounts[i] }("");
             if (!transferSucceeded) revert TransferFailed(tos[i], amounts[i]);
         }
