@@ -3,8 +3,7 @@
 pragma solidity 0.8.12;
 
 import { IEnvironment } from "../IEnvironment.sol";
-
-error PastEpoch();
+import { PastEpoch } from "./Errors.sol";
 
 /**
  * @title UpdateHistories

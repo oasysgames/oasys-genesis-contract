@@ -237,7 +237,7 @@ interface IStakeManager {
      ******************/
 
     /**
-     * Returns validators who create blocks in the current epoch.
+     * Returns validators.
      * @param epoch Target epoch number.
      * @param cursor The index of the first item being requested.
      * @param howMany Indicates how many items should be returned.

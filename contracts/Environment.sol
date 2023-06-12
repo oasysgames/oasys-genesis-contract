@@ -5,13 +5,11 @@ pragma solidity 0.8.12;
 import { System } from "./System.sol";
 import { IEnvironment } from "./IEnvironment.sol";
 import { UpdateHistories } from "./lib/UpdateHistories.sol";
+import { PastEpoch } from "./lib/Errors.sol";
 import { EnvironmentValue as EnvironmentValueLib } from "./lib/EnvironmentValue.sol";
 
 // Not executable in the last block of epoch.
 error OnlyNotLastBlock();
-
-// Epoch must be the future.
-error PastEpoch();
 
 /**
  * @title Environment
