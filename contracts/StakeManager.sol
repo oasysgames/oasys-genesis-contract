@@ -83,7 +83,7 @@ contract StakeManager is IStakeManager, System {
      * @param validator Validator address.
      */
     modifier validatorExists(address validator) {
-        if (validators[validator].owner == address(0)) {
+        if (validators[validator].id == address(0)) {
             revert ValidatorDoesNotExist();
         }
         _;
@@ -104,7 +104,7 @@ contract StakeManager is IStakeManager, System {
      * @param validator Validator address.
      */
     modifier onlyValidatorOwner(address validator) {
-        if (validators[validator].owner == msg.sender) {
+        if (validators[validator].getOwner() != msg.sender) {
             revert UnauthorizedSender();
         }
         _;
@@ -116,7 +116,7 @@ contract StakeManager is IStakeManager, System {
      */
     modifier onlyValidatorOwnerOrOperator(address validator) {
         Validator storage _validator = validators[validator];
-        if (msg.sender != _validator.owner && msg.sender != _validator.operator) {
+        if (msg.sender != _validator.getOwner() && msg.sender != _validator.operator) {
             revert UnauthorizedSender();
         }
         _;
@@ -171,9 +171,9 @@ contract StakeManager is IStakeManager, System {
     function slash(address operator, uint256 blocks) external validatorExists(operatorToOwner[operator]) onlyCoinbase {
         Validator storage validator = validators[operatorToOwner[operator]];
         uint256 until = validator.slash(environment.value(), environment.epoch(), blocks);
-        emit ValidatorSlashed(validator.owner);
+        emit ValidatorSlashed(validator.id);
         if (until > 0) {
-            emit ValidatorJailed(validator.owner, until);
+            emit ValidatorJailed(validator.id, until);
         }
     }
 
@@ -682,9 +682,9 @@ contract StakeManager is IStakeManager, System {
             Staker storage staker = stakers[_validator.stakers[cursor + i]];
             _stakers[i] = staker.signer;
             stakes[i] =
-                staker.getStake(_validator.owner, Token.Type.OAS, epoch) +
-                staker.getStake(_validator.owner, Token.Type.wOAS, epoch) +
-                staker.getStake(_validator.owner, Token.Type.sOAS, epoch);
+                staker.getStake(_validator.id, Token.Type.OAS, epoch) +
+                staker.getStake(_validator.id, Token.Type.wOAS, epoch) +
+                staker.getStake(_validator.id, Token.Type.sOAS, epoch);
         }
 
         return (_stakers, stakes, newCursor);

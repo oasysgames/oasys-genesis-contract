@@ -28,7 +28,7 @@ library Staker {
         Token.Type token,
         uint256 amount
     ) internal {
-        staker.stakeUpdates[token][validator.owner].add(staker.stakeAmounts[token][validator.owner], epoch, amount);
+        staker.stakeUpdates[token][validator.id].add(staker.stakeAmounts[token][validator.id], epoch, amount);
         validator.stake(epoch, staker.signer, amount);
     }
 
@@ -39,8 +39,8 @@ library Staker {
         Token.Type token,
         uint256 amount
     ) internal returns (uint256) {
-        amount = staker.stakeUpdates[token][validator.owner].sub(
-            staker.stakeAmounts[token][validator.owner],
+        amount = staker.stakeUpdates[token][validator.id].sub(
+            staker.stakeAmounts[token][validator.id],
             environment.epoch() + 1,
             amount
         );
@@ -57,7 +57,7 @@ library Staker {
         uint256 epochs
     ) internal returns (uint256) {
         (uint256 rewards, uint256 lastClaim) = getRewards(staker, environment, validator, epochs);
-        staker.lastClaimReward[validator.owner] = lastClaim;
+        staker.lastClaimReward[validator.id] = lastClaim;
         return rewards;
     }
 
@@ -86,7 +86,7 @@ library Staker {
         IStakeManager.Validator storage validator,
         uint256 epochs
     ) internal view returns (uint256 rewards, uint256 lastClaim) {
-        lastClaim = staker.lastClaimReward[validator.owner];
+        lastClaim = staker.lastClaimReward[validator.id];
         uint256 prevEpoch = environment.epoch() - 1;
         if (epochs == 0 || epochs + lastClaim > prevEpoch) {
             epochs = prevEpoch - lastClaim;
@@ -95,9 +95,9 @@ library Staker {
         for (uint256 i = 0; i < epochs; i++) {
             lastClaim += 1;
 
-            uint256 _stake = getStake(staker, validator.owner, Token.Type.OAS, lastClaim) +
-                getStake(staker, validator.owner, Token.Type.wOAS, lastClaim) +
-                getStake(staker, validator.owner, Token.Type.sOAS, lastClaim);
+            uint256 _stake = getStake(staker, validator.id, Token.Type.OAS, lastClaim) +
+                getStake(staker, validator.id, Token.Type.wOAS, lastClaim) +
+                getStake(staker, validator.id, Token.Type.sOAS, lastClaim);
             if (_stake == 0) continue;
 
             uint256 validatorRewards = validator.getRewardsWithoutCommissions(

@@ -15,6 +15,9 @@ error AlreadyJoined();
 // Operator is zero address.
 error EmptyAddress();
 
+//Operator is same as validator id.
+error SameAsValidatorId();
+
 // Operator is same as owner.
 error SameAsOwner();
 
@@ -32,20 +35,25 @@ library Validator {
      ********************/
 
     function join(IStakeManager.Validator storage validator, address operator) internal {
-        if (validator.owner != address(0)) revert AlreadyJoined();
+        if (validator.id != address(0)) revert AlreadyJoined();
 
-        validator.owner = msg.sender;
+        validator.id = msg.sender;
+        // Not set here, will be set in updateOwner.
+        // validator.owner = msg.sender;
         updateOperator(validator, operator);
     }
 
     function updateOwner(IStakeManager.Validator storage validator, address owner) internal {
         if (owner == address(0)) revert EmptyAddress();
+        if (owner == validator.id) revert SameAsValidatorId();
+        if (owner == validator.owner) revert SameAsOwner();
 
         validator.owner = owner;
     }
 
     function updateOperator(IStakeManager.Validator storage validator, address operator) internal {
         if (operator == address(0)) revert EmptyAddress();
+        if (operator == validator.id) revert SameAsValidatorId();
         if (operator == validator.owner) revert SameAsOwner();
 
         validator.operator = operator;
@@ -122,6 +130,13 @@ library Validator {
     /******************
      * View Functions *
      ******************/
+
+    function getOwner(IStakeManager.Validator storage validator) internal view returns (address) {
+        // The owner property is inialized when the validator owner is updated.
+        // Until then, the id property is used as the owner.
+        if (validator.owner == address(0)) return validator.id;
+        return validator.owner;
+    }
 
     function isJailed(IStakeManager.Validator storage validator, uint256 epoch) internal view returns (bool) {
         return validator.jails[epoch];

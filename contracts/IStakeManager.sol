@@ -36,7 +36,8 @@ interface IStakeManager {
 
     struct Validator {
         // Validator address
-        address owner;
+        // This address is the identity of the validator, not be changed after registration.
+        address id;
         // Address used for block signing
         address operator;
         // List of inactive epoch numbers.
@@ -56,6 +57,10 @@ interface IStakeManager {
         mapping(uint256 => uint256) blocks;
         // Number of slashes per epoch
         mapping(uint256 => uint256) slashes;
+        // ----- added from v1.4.0 -----
+        // Address of owner
+        // Owner can perform operations such as updating the operator address and claiming commissions.
+        address owner;
     }
 
     struct Staker {
