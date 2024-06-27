@@ -20,6 +20,7 @@ interface IStakeManager {
     event ValidatorDeactivated(address indexed validator, uint256[] epochs);
     event ValidatorSlashed(address indexed validator);
     event ValidatorJailed(address indexed validator, uint256 until);
+    event ValidatorOwnerUpdated(address indexed validator, address indexed oldOwner, address newOwner);
     event OperatorUpdated(address indexed validator, address oldOperator, address newOperator);
     event Staked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
     event ReStaked(address indexed staker, address indexed validator, uint256 amount);
@@ -114,6 +115,13 @@ interface IStakeManager {
     function joinValidator(address operator) external;
 
     /**
+     * Update the validator owner address.
+     * @param validator Validator address.
+     * @param newOwner New owner address.
+     */
+    function updateValidatorOwner(address validator, address newOwner) external;
+
+    /**
      * Update the block signing address.
      * @param operator New address used for block signing.
      */
@@ -152,6 +160,16 @@ interface IStakeManager {
      *     If the gas limit is reached, specify a smaller value.
      */
     function restakeCommissions(uint256 epochs) external;
+
+    /**
+     * Stake commissions to validator v2.
+     * @param validator Validator address.
+     * @param epochs Number of epochs to be stake.
+     * @dev The changes from v1 are as follows:
+     *       - validator parameter is added.
+     *       - allow restake even the staker doesn't exist.
+     */
+    function restakeCommissionsV2(address validator, uint256 epochs) external;
 
     /************************
      * Functions for Staker *

@@ -100,6 +100,17 @@ contract StakeManager is IStakeManager, System {
     }
 
     /**
+     * Modifier requiring the sender to be a owner
+     * @param validator Validator address.
+     */
+    modifier onlyValidatorOwner(address validator) {
+        if (validators[validator].owner == msg.sender) {
+            revert UnauthorizedSender();
+        }
+        _;
+    }
+
+    /**
      * Modifier requiring the sender to be a owner or operator of the validator.
      * @param validator Validator address.
      */
@@ -180,11 +191,42 @@ contract StakeManager is IStakeManager, System {
             revert AlreadyInUse();
         }
 
+        // The inital validator address is the owner address
         validators[owner].join(operator);
         validatorOwners.push(owner);
         operatorToOwner[operator] = owner;
 
         emit ValidatorJoined(owner);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     * @dev Just update the owner address, remaining the validator address unchanged.
+     *      We intentionally separate the owner and the validator address.
+     *      - Validator address: The inital owner address
+     *      - Owner address: The address that can control the validator(Claiming commissions, etc.)
+     */
+    function updateValidatorOwner(address validator_, address newOwner) external onlyValidatorOwner(validator_) {
+        Validator storage validator = validators[validator_];
+        address oldOwner = msg.sender;
+
+        validator.updateOwner(newOwner);
+
+        // Lookup validatorOwners and replace the old owner with the new owner
+        bool found = false;
+        for (uint256 i = 0; i < validatorOwners.length; i++) {
+            if (validatorOwners[i] == oldOwner) {
+                validatorOwners[i] = newOwner;
+                found = true;
+                break;
+            }
+        }
+        // sanity check
+        if (!found) {
+            revert ValidatorDoesNotExist();
+        }
+
+        emit ValidatorOwnerUpdated(validator_, oldOwner, newOwner);
     }
 
     /**
@@ -235,8 +277,8 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function claimCommissions(address validator, uint256 epochs) external validatorExists(msg.sender) {
-        uint256 amount = validators[msg.sender].claimCommissions(environment, epochs);
+    function claimCommissions(address validator, uint256 epochs) external onlyValidatorOwner(validator) {
+        uint256 amount = validators[validator].claimCommissions(environment, epochs);
         emit ClaimedCommissions(msg.sender, amount);
 
         if (amount > 0) {
@@ -257,6 +299,23 @@ contract StakeManager is IStakeManager, System {
         if (amount == 0) revert NoAmount();
 
         _stake(msg.sender, msg.sender, environment.epoch(), Token.Type.OAS, amount);
+        emit ReStaked(msg.sender, msg.sender, amount);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     * @dev stakerExists(msg.sender) modifier is removed.
+     *      if the staker does not exist, it will be created.
+     */
+    function restakeCommissionsV2(address validator, uint256 epochs)
+        external
+        onlyValidatorOwner(validator)
+        onlyNotLastBlock
+    {
+        uint256 amount = validators[validator].claimCommissions(environment, epochs);
+        if (amount == 0) revert NoAmount();
+
+        _stake(msg.sender, validator, environment.epoch(), Token.Type.OAS, amount);
         emit ReStaked(msg.sender, msg.sender, amount);
     }
 
@@ -283,9 +342,9 @@ contract StakeManager is IStakeManager, System {
      * @inheritdoc IStakeManager
      */
     function unstake(
-        address validator,
-        Token.Type token,
-        uint256 amount
+        address /*validator*/,
+        Token.Type /*token*/,
+        uint256 /*amount*/
     ) external {
         revert ObsoletedMethod();
     }
@@ -314,7 +373,7 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function claimUnstakes(address staker) external stakerExists(msg.sender) {
+    function claimUnstakes(address /*staker*/) external stakerExists(msg.sender) {
         stakers[msg.sender].claimUnstakes(environment);
     }
 
@@ -338,7 +397,7 @@ contract StakeManager is IStakeManager, System {
      * @inheritdoc IStakeManager
      */
     function claimRewards(
-        address staker,
+        address /*staker*/,
         address validator,
         uint256 epochs
     ) external validatorExists(validator) stakerExists(msg.sender) {

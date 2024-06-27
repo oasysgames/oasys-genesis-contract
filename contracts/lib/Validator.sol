@@ -38,6 +38,12 @@ library Validator {
         updateOperator(validator, operator);
     }
 
+    function updateOwner(IStakeManager.Validator storage validator, address owner) internal {
+        if (owner == address(0)) revert EmptyAddress();
+
+        validator.owner = owner;
+    }
+
     function updateOperator(IStakeManager.Validator storage validator, address operator) internal {
         if (operator == address(0)) revert EmptyAddress();
         if (operator == validator.owner) revert SameAsOwner();
