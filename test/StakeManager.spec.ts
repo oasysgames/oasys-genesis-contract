@@ -367,7 +367,7 @@ describe('StakeManager', () => {
 
       it('should revert when operator address asme as owner address', async () => {
         const tx = attackerv.joinValidator(attacker.address)
-        await expect(tx).to.revertedWith('SameAsOwner()')
+        await expect(tx).to.revertedWith('SameAsValidatorId()')
       })
 
       it('should revert when operator address is already in use', async () => {
@@ -385,7 +385,7 @@ describe('StakeManager', () => {
       await expect(tx).to.revertedWith('EmptyAddress()')
 
       tx = validator.updateOperator(owner.address)
-      await expect(tx).to.revertedWith('SameAsOwner()')
+      await expect(tx).to.revertedWith('SameAsValidatorId()')
 
       // from owner
       await expect(await validator.updateOperator(newOperator.address))
