@@ -66,8 +66,8 @@ contract StakeManager is IStakeManager, System {
     // List of validators
     mapping(address => Validator) public validators;
     address[] public validatorOwners;
-    // Mapping of validator operator to validator owner
-    mapping(address => address) public operatorToOwner;
+    // Mapping of validator operator to validator id
+    mapping(address => address) public operatorToValidatorId;
     // List of stakers
     mapping(address => Staker) public stakers;
     address[] public stakerSigners;
@@ -168,8 +168,8 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function slash(address operator, uint256 blocks) external validatorExists(operatorToOwner[operator]) onlyCoinbase {
-        Validator storage validator = validators[operatorToOwner[operator]];
+    function slash(address operator, uint256 blocks) external validatorExists(operatorToValidatorId[operator]) onlyCoinbase {
+        Validator storage validator = validators[operatorToValidatorId[operator]];
         uint256 until = validator.slash(environment.value(), environment.epoch(), blocks);
         emit ValidatorSlashed(validator.id);
         if (until > 0) {
@@ -185,16 +185,17 @@ contract StakeManager is IStakeManager, System {
      * @inheritdoc IStakeManager
      */
     function joinValidator(address operator) external {
-        address owner = msg.sender;
+        address validatorId = msg.sender;
+        // The inital owner is same as validator id address
+        address owner = validatorId;
 
-        if (operatorToOwner[operator] != address(0)) {
+        if (operatorToValidatorId[operator] != address(0)) {
             revert AlreadyInUse();
         }
 
-        // The inital validator address is the owner address
-        validators[owner].join(operator);
+        validators[validatorId].join(operator);
         validatorOwners.push(owner);
-        operatorToOwner[operator] = owner;
+        operatorToValidatorId[operator] = validatorId;
 
         emit ValidatorJoined(owner);
     }
@@ -232,20 +233,16 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function updateOperator(address operator) external validatorExists(msg.sender) {
-        address owner = msg.sender;
-
-        if (operatorToOwner[operator] != address(0)) {
+    function updateOperator(address validator_, address operator) external onlyValidatorOwner(validator_) {
+        if (operatorToValidatorId[operator] != address(0)) {
             revert AlreadyInUse();
         }
 
-        Validator storage validator = validators[owner];
+        Validator storage validator = validators[validator_];
         address oldOperator = validator.operator;
-
         validator.updateOperator(operator);
-        operatorToOwner[operator] = owner;
 
-        emit OperatorUpdated(owner, oldOperator, operator);
+        emit OperatorUpdated(validator_, oldOperator, operator);
     }
 
     /**
@@ -647,7 +644,7 @@ contract StakeManager is IStakeManager, System {
      * @inheritdoc IStakeManager
      */
     function getOperatorStakes(address operator, uint256 epoch) external view returns (uint256 stakes) {
-        Validator storage validator = validators[operatorToOwner[operator]];
+        Validator storage validator = validators[operatorToValidatorId[operator]];
         if (validator.operator != operator) return 0;
 
         epoch = epoch > 0 ? epoch : environment.epoch();

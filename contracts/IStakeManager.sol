@@ -128,9 +128,10 @@ interface IStakeManager {
 
     /**
      * Update the block signing address.
+     * @param validator Validator address.
      * @param operator New address used for block signing.
      */
-    function updateOperator(address operator) external;
+    function updateOperator(address validator, address operator) external;
 
     /**
      * Change the validator status to active.
