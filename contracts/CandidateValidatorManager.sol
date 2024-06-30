@@ -30,7 +30,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
      * @param _stakeManager Address of the StakeManager contract.
      * @param _highStakes Address of the AddressList contract.
      */
-    constructor(address _environment, address _stakeManager, address _highStakes) {
+    constructor(address _environment, address _stakeManager, address _highStakes) public {
         if (_environment == address(0)) revert NullAddress();
         if (_stakeManager == address(0)) revert NullAddress();
         if (_highStakes == address(0)) revert NullAddress();
@@ -65,7 +65,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
         external
         view
         returns (
-            address[] memory owners,
+            address[] memory validatorIds,
             address[] memory operators,
             bool[] memory actives,
             bool[] memory jailed,
@@ -75,8 +75,8 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
         )
     {
         if (epoch == 0) epoch = environment.epoch();
-        (owners, newCursor) = stakeManager.getValidatorOwners(cursor, howMany);
-        (operators, actives, jailed, stakes, candidates) = _getValidatorInfos(owners, epoch);
+        (validatorIds, newCursor) = stakeManager.getValidatorIds(cursor, howMany);
+        (operators, actives, jailed, stakes, candidates) = _getValidatorInfos(validatorIds, epoch);
     }
 
     /**
@@ -90,7 +90,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
         external
         view
         returns (
-            address[] memory owners,
+            address[] memory owners, // validatorIds, but named as owners. Don't rename as validator node is affected.
             address[] memory operators,
             bool[] memory actives,
             bool[] memory jailed,
@@ -148,7 +148,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
     }
 
     function _getValidatorInfos(
-        address[] memory owners,
+        address[] memory validatorIds,
         uint256 epoch
     )
         internal
@@ -161,7 +161,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
             bool[] memory candidates
         )
     {
-        uint256 length = owners.length;
+        uint256 length = validatorIds.length;
         operators = new address[](length);
         actives = new bool[](length);
         jailed = new bool[](length);
@@ -170,7 +170,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
 
         for (uint256 i = 0; i < length; i++) {
             (operators[i], actives[i], jailed[i], candidates[i], stakes[i]) = stakeManager.getValidatorInfo(
-                owners[i],
+                validatorIds[i],
                 epoch
             );
         }

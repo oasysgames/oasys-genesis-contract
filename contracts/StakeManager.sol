@@ -65,7 +65,7 @@ contract StakeManager is IStakeManager, System {
     uint256[] public stakeAmounts;
     // List of validators
     mapping(address => Validator) public validators;
-    address[] public validatorOwners;
+    address[] public validatorIds;
     // Mapping of validator operator to validator id
     mapping(address => address) public operatorToValidatorId;
     // List of stakers
@@ -186,18 +186,16 @@ contract StakeManager is IStakeManager, System {
      */
     function joinValidator(address operator) external {
         address validatorId = msg.sender;
-        // The inital owner is same as validator id address
-        address owner = validatorId;
 
         if (operatorToValidatorId[operator] != address(0)) {
             revert AlreadyInUse();
         }
 
         validators[validatorId].join(operator);
-        validatorOwners.push(owner);
+        validatorIds.push(validatorId);
         operatorToValidatorId[operator] = validatorId;
 
-        emit ValidatorJoined(owner);
+        emit ValidatorJoined(validatorId);
     }
 
     /**
@@ -210,22 +208,7 @@ contract StakeManager is IStakeManager, System {
     function updateValidatorOwner(address validator_, address newOwner) external onlyValidatorOwner(validator_) {
         Validator storage validator = validators[validator_];
         address oldOwner = msg.sender;
-
         validator.updateOwner(newOwner);
-
-        // Lookup validatorOwners and replace the old owner with the new owner
-        bool found = false;
-        for (uint256 i = 0; i < validatorOwners.length; i++) {
-            if (validatorOwners[i] == oldOwner) {
-                validatorOwners[i] = newOwner;
-                found = true;
-                break;
-            }
-        }
-        // sanity check
-        if (!found) {
-            revert ValidatorDoesNotExist();
-        }
 
         emit ValidatorOwnerUpdated(validator_, oldOwner, newOwner);
     }
@@ -292,11 +275,7 @@ contract StakeManager is IStakeManager, System {
         stakerExists(msg.sender)
         onlyNotLastBlock
     {
-        uint256 amount = validators[msg.sender].claimCommissions(environment, epochs);
-        if (amount == 0) revert NoAmount();
-
-        _stake(msg.sender, msg.sender, environment.epoch(), Token.Type.OAS, amount);
-        emit ReStaked(msg.sender, msg.sender, amount);
+        _restakeCommissions(msg.sender, epochs);
     }
 
     /**
@@ -309,11 +288,7 @@ contract StakeManager is IStakeManager, System {
         onlyValidatorOwner(validator)
         onlyNotLastBlock
     {
-        uint256 amount = validators[validator].claimCommissions(environment, epochs);
-        if (amount == 0) revert NoAmount();
-
-        _stake(msg.sender, validator, environment.epoch(), Token.Type.OAS, amount);
-        emit ReStaked(msg.sender, msg.sender, amount);
+        _restakeCommissions(validator, epochs);
     }
 
     /************************
@@ -437,7 +412,7 @@ contract StakeManager is IStakeManager, System {
         external
         view
         returns (
-            address[] memory owners,
+            address[] memory owners, // validatorIds, but named as owners. Don't rename as validator node is affected.
             address[] memory operators,
             uint256[] memory stakes,
             bool[] memory candidates,
@@ -450,17 +425,44 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
+    function getValidatorIds(uint256 cursor, uint256 howMany)
+        external
+        view
+        returns (address[] memory ids, uint256 newCursor)
+    {
+        (howMany, newCursor) = _pagination(cursor, howMany, validatorIds.length);
+        ids = new address[](howMany);
+        for (uint256 i = 0; i < howMany; i++) {
+            ids[i] = validatorIds[cursor + i];
+        }
+        return (ids, newCursor);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
     function getValidatorOwners(uint256 cursor, uint256 howMany)
         external
         view
         returns (address[] memory owners, uint256 newCursor)
     {
-        (howMany, newCursor) = _pagination(cursor, howMany, validatorOwners.length);
+        (howMany, newCursor) = _pagination(cursor, howMany, validatorIds.length);
         owners = new address[](howMany);
         for (uint256 i = 0; i < howMany; i++) {
-            owners[i] = validatorOwners[cursor + i];
+            owners[i] = validators[validatorIds[cursor + i]].getOwner();
         }
         return (owners, newCursor);
+    }
+
+    // For backward compatibility
+    // The validatorIds is oringally named as `validatorOwners`
+    // validatorOwners is defined as public function, so the corresponding read function is generated.
+    function validatorOwners() public view returns(address[] memory) {
+        address[] memory owners = new address[](validatorIds.length);
+        for (uint i = 0; i < validatorIds.length; i++) {
+            owners[i] = validators[validatorIds[i]].getOwner();
+        }
+        return owners;
     }
 
     /**
@@ -483,7 +485,7 @@ contract StakeManager is IStakeManager, System {
      * @inheritdoc IStakeManager
      */
     function getValidatorInfo(address validator, uint256 epoch)
-        external
+        public
         view
         returns (address operator, bool active, bool jailed, bool candidate, uint256 stakes)
     {
@@ -497,6 +499,16 @@ contract StakeManager is IStakeManager, System {
         candidate = active && !jailed && stakes >= environment.findValue(epoch).validatorThreshold;
 
         return (operator, active, jailed, candidate, stakes);
+    }
+
+    // V2 include owner address
+    function getValidatorInfoV2(address validator, uint256 epoch)
+        public
+        view
+        returns (address owner, address operator, bool active, bool jailed, bool candidate, uint256 stakes)
+    {
+        (operator, active, jailed, candidate, stakes) = getValidatorInfo(validator, epoch);
+        owner = validators[validator].getOwner();
     }
 
     /**
@@ -709,14 +721,14 @@ contract StakeManager is IStakeManager, System {
         Staker storage _staker = stakers[staker];
         epoch = epoch > 0 ? epoch : environment.epoch();
 
-        (howMany, newCursor) = _pagination(cursor, howMany, validatorOwners.length);
+        (howMany, newCursor) = _pagination(cursor, howMany, validatorIds.length);
         _validators = new address[](howMany);
         oasStakes = new uint256[](howMany);
         woasStakes = new uint256[](howMany);
         soasStakes = new uint256[](howMany);
 
         for (uint256 i = 0; i < howMany; i++) {
-            _validators[i] = validatorOwners[cursor + i];
+            _validators[i] = validatorIds[cursor + i];
             oasStakes[i] = _staker.getStake(_validators[i], Token.Type.OAS, epoch);
             woasStakes[i] = _staker.getStake(_validators[i], Token.Type.wOAS, epoch);
             soasStakes[i] = _staker.getStake(_validators[i], Token.Type.sOAS, epoch);
@@ -768,5 +780,13 @@ contract StakeManager is IStakeManager, System {
         stakeUpdates.add(stakeAmounts, epoch, amount);
 
         candidateManager.afterStakeUpdate(validator);
+    }
+
+    function _restakeCommissions(address validator, uint256 epochs) internal {
+        uint256 amount = validators[validator].claimCommissions(environment, epochs);
+        if (amount == 0) revert NoAmount();
+
+        _stake(msg.sender, validator, environment.epoch(), Token.Type.OAS, amount);
+        emit ReStaked(msg.sender, validator, amount);
     }
 }

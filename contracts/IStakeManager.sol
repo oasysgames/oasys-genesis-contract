@@ -287,6 +287,18 @@ interface IStakeManager {
         );
 
     /**
+     * Returns validator id addresses with pagination.
+     * @param cursor The index of the first item being requested.
+     * @param howMany Indicates how many items should be returned.
+     * @return ids List of validator owner addresses.
+     * @return newCursor Cursor that should be used in the next request.
+     */
+    function getValidatorIds(uint256 cursor, uint256 howMany)
+        external
+        view
+        returns (address[] memory ids, uint256 newCursor);
+
+    /**
      * Returns validator owner addresses with pagination.
      * @param cursor The index of the first item being requested.
      * @param howMany Indicates how many items should be returned.
