@@ -294,6 +294,31 @@
           "internalType": "address",
           "name": "validator",
           "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "oldOwner",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "ValidatorOwnerUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "validator",
+          "type": "address"
         }
       ],
       "name": "ValidatorSlashed",
@@ -780,6 +805,35 @@
     {
       "inputs": [
         {
+          "internalType": "uint256",
+          "name": "cursor",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "howMany",
+          "type": "uint256"
+        }
+      ],
+      "name": "getValidatorIds",
+      "outputs": [
+        {
+          "internalType": "address[]",
+          "name": "ids",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint256",
+          "name": "newCursor",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "address",
           "name": "validator",
           "type": "address"
@@ -1024,6 +1078,24 @@
           "type": "uint256"
         }
       ],
+      "name": "restakeCommissionsV2",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "validator",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "epochs",
+          "type": "uint256"
+        }
+      ],
       "name": "restakeRewards",
       "outputs": [],
       "stateMutability": "nonpayable",
@@ -1120,11 +1192,34 @@
       "inputs": [
         {
           "internalType": "address",
+          "name": "validator",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
           "name": "operator",
           "type": "address"
         }
       ],
       "name": "updateOperator",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "validator",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "updateValidatorOwner",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
