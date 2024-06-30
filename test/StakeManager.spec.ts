@@ -141,7 +141,7 @@ describe('StakeManager', () => {
     expStakes?: string[]
     expNewCursor?: number
   }) => {
-    expect(params.owners).to.eql(params.expValidators.map((x) => x.owner.address))
+    expect(params.owners).to.eql(params.expValidators.map((x) => x.validatorId.address))
     expect(params.operators).to.eql(params.expValidators.map((x) => x.operator.address))
     expect(params.candidates).to.eql(params.expCandidates)
     if (params.expStakes) {
@@ -352,7 +352,7 @@ describe('StakeManager', () => {
 
         await expect(await validator.joinValidator())
           .to.emit(stakeManager, 'ValidatorJoined')
-          .withArgs(validator.owner.address)
+          .withArgs(validator.validatorId.address)
       })
 
       it('should revert when already joined', async () => {
@@ -376,30 +376,75 @@ describe('StakeManager', () => {
       })
     })
 
-    it('updateOperator()', async () => {
-      const newOperator = accounts[accounts.length - 3]
+    it('updateValidatorOwner()', async () => {
+      const newOwner = accounts[accounts.length - 4]
 
       await validator.joinValidator()
 
-      let tx = validator.updateOperator(zeroAddress)
+      let tx = validator.updateValidatorOwner(validator, zeroAddress)
       await expect(tx).to.revertedWith('EmptyAddress()')
 
-      tx = validator.updateOperator(owner.address)
+      tx = validator.updateValidatorOwner(validator, owner.address)
       await expect(tx).to.revertedWith('SameAsValidatorId()')
 
       // from owner
-      await expect(await validator.updateOperator(newOperator.address))
+      await expect(await validator.updateValidatorOwner(validator, newOwner.address))
+        .to.emit(stakeManager, 'ValidatorOwnerUpdated')
+        .withArgs(validator.validatorId.address, validator.validatorId.address, newOwner.address)
+      expect((await validator.getInfoV2()).owner).to.equal(newOwner.address)
+
+      tx = validator.updateValidatorOwner(validator, newOwner.address, newOwner)
+      await expect(tx).to.revertedWith('SameAsOwner()')
+
+      // from operator
+      tx = validator.updateValidatorOwner(validator, operator.address, operator)
+      await expect(tx).to.revertedWith('UnauthorizedSender()')
+
+      // from attacker
+      tx = validator.updateValidatorOwner(validator, attacker.address, attacker)
+      await expect(tx).to.revertedWith('UnauthorizedSender()')
+
+      // from newOwner
+      const newOwner2 = accounts[accounts.length - 5]
+      await expect(await validator.updateValidatorOwner(validator, newOwner2.address, newOwner))
+        .to.emit(stakeManager, 'ValidatorOwnerUpdated')
+        .withArgs(validator.validatorId.address, newOwner.address, newOwner2.address)
+        expect((await validator.getInfoV2()).owner).to.equal(newOwner2.address)
+    })
+
+    it('updateOperator()', async () => {
+      const newOperator = accounts[accounts.length - 4]
+
+      await validator.joinValidator()
+
+      let tx = validator.updateOperator(validator, zeroAddress)
+      await expect(tx).to.revertedWith('EmptyAddress()')
+
+      tx = validator.updateOperator(validator, owner.address)
+      await expect(tx).to.revertedWith('SameAsValidatorId()')
+
+      // from owner
+      await expect(await validator.updateOperator(validator, newOperator.address))
         .to.emit(stakeManager, 'OperatorUpdated')
-        .withArgs(validator.owner.address, validator.operator.address, newOperator.address)
+        .withArgs(validator.validatorId.address, validator.operator.address, newOperator.address)
       expect((await validator.getInfo()).operator).to.equal(newOperator.address)
 
       // from operator
-      tx = validator.updateOperator(operator.address, operator)
-      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
+      tx = validator.updateOperator(validator, operator.address, operator)
+      await expect(tx).to.revertedWith('UnauthorizedSender()')
 
       // from attacker
-      tx = validator.updateOperator(attacker.address, attacker)
-      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
+      tx = validator.updateOperator(validator, attacker.address, attacker)
+      await expect(tx).to.revertedWith('UnauthorizedSender()')
+
+      // from new owner
+      const newOwner = accounts[accounts.length - 5]
+      const newOperator2 = accounts[accounts.length - 6]
+      await validator.updateValidatorOwner(validator, newOwner.address)
+      await expect(await validator.updateOperator(validator, newOperator2.address, newOwner))
+        .to.emit(stakeManager, 'OperatorUpdated')
+        .withArgs(validator.validatorId.address, newOperator.address, newOperator2.address)
+      expect((await validator.getInfo()).operator).to.equal(newOperator2.address)
     })
 
     it('deactivateValidator() and activateValidator()', async () => {
@@ -521,16 +566,16 @@ describe('StakeManager', () => {
       await staker1.stake(Token.sOAS, validator, '250')
 
       await expectBalance(stakeManager, '500', '250', '250')
-      await expectBalance(validator.owner, '10000', '0', '0')
+      await expectBalance(validator.validatorId, '10000', '0', '0')
 
       await toNextEpoch()
       await toNextEpoch()
 
       await expect(await validator.claimCommissions(owner))
         .to.emit(stakeManager, 'ClaimedCommissions')
-        .withArgs(validator.owner.address, toBNWei('0.005707762557077625'))
+        .withArgs(validator.validatorId.address, toBNWei('0.005707762557077625'))
       await expectBalance(stakeManager, '499.994292237442922375', '250', '250')
-      await expectBalance(validator.owner, '10000.005707762557077625', '0', '0')
+      await expectBalance(validator.validatorId, '10000.005707762557077625', '0', '0')
 
       await toNextEpoch()
       await toNextEpoch()
@@ -541,18 +586,18 @@ describe('StakeManager', () => {
       await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
       await toNextEpoch()
 
-      await woas.connect(validator.owner).mint({ gasPrice, value: toWei('1000') })
-      await woas.connect(validator.owner).approve(stakeManager.address, toWei('1000'), { gasPrice })
+      await woas.connect(validator.validatorId).mint({ gasPrice, value: toWei('1000') })
+      await woas.connect(validator.validatorId).approve(stakeManager.address, toWei('1000'), { gasPrice })
 
       await expectBalance(stakeManager, '0', '0', '0')
-      await expectBalance(validator.owner, '9000', '1000', '0')
+      await expectBalance(validator.validatorId, '9000', '1000', '0')
       await validator.expectTotalStake('0', '0', '0')
 
       await validator.stake(Token.wOAS, validator, '1000')
       await toNextEpoch()
 
       await expectBalance(stakeManager, '0', '1000', '0')
-      await expectBalance(validator.owner, '9000', '0', '0')
+      await expectBalance(validator.validatorId, '9000', '0', '0')
       await validator.expectTotalStake('0', '1000', '0')
 
       await expect(validator.restakeCommissions()).to.revertedWith('NoAmount')
@@ -562,10 +607,10 @@ describe('StakeManager', () => {
       const tx = await validator.restakeCommissions()
       await expect(tx)
         .to.emit(stakeManager, 'ReStaked')
-        .withArgs(validator.owner.address, validator.owner.address, '1141552511415525')
+        .withArgs(validator.validatorId.address, validator.validatorId.address, '1141552511415525')
 
       await expectBalance(stakeManager, '0', '1000', '0')
-      await expectBalance(validator.owner, '9000', '0', '0')
+      await expectBalance(validator.validatorId, '9000', '0', '0')
       await validator.expectTotalStake('0.00114155', '1000', '0')
 
       await toNextEpoch()
@@ -574,8 +619,25 @@ describe('StakeManager', () => {
       await validator.restakeCommissions()
 
       await expectBalance(stakeManager, '0', '1000', '0')
-      await expectBalance(validator.owner, '9000', '0', '0')
+      await expectBalance(validator.validatorId, '9000', '0', '0')
       await validator.expectTotalStake('0.0045662', '1000', '0')
+    })
+
+    it('restakeCommissionsV2()', async () => {
+      await validator.joinValidator()
+      await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
+      await toNextEpoch()
+
+      await woas.connect(validator2.validatorId).mint({ gasPrice, value: toWei('1000') })
+      await woas.connect(validator2.validatorId).approve(stakeManager.address, toWei('1000'), { gasPrice })
+      await validator2.stake(Token.wOAS, validator, '1000')
+      await toNextEpoch()
+      await toNextEpoch()
+
+      const tx = await validator.restakeCommissionsV2(validator)
+      await expect(tx)
+        .to.emit(stakeManager, 'ReStaked')
+        .withArgs(validator.validatorId.address, validator.validatorId.address, '1141552511415525')
     })
   })
 
@@ -1041,8 +1103,8 @@ describe('StakeManager', () => {
 
       const tx1 = await staker1.unstakeV2(Token.OAS, validator1, '2.5')
       const tx2 = await staker1.unstakeV2(Token.wOAS, validator1, '2.5')
-      await expect(tx1).to.emit(stakeManager, 'UnstakedV2').withArgs(staker1.address, validator1.owner.address, 0)
-      await expect(tx2).to.emit(stakeManager, 'UnstakedV2').withArgs(staker1.address, validator1.owner.address, 1)
+      await expect(tx1).to.emit(stakeManager, 'UnstakedV2').withArgs(staker1.address, validator1.validatorId.address, 0)
+      await expect(tx2).to.emit(stakeManager, 'UnstakedV2').withArgs(staker1.address, validator1.validatorId.address, 1)
 
       await expectBalance(stakeManager, '515', '5', '10')
       await expectBalance(staker1.signer, '7985', '995', '990')
@@ -1211,7 +1273,7 @@ describe('StakeManager', () => {
       const tx = await staker1.restakeRewards(validator1)
       await expect(tx)
         .to.emit(stakeManager, 'ReStaked')
-        .withArgs(staker1.address, validator1.owner.address, '11415525114155251')
+        .withArgs(staker1.address, validator1.validatorId.address, '11415525114155251')
 
       await expectBalance(stakeManager, '500', '1000', '0')
       await expectBalance(staker1.signer, '8000', '0', '1000')
@@ -1322,14 +1384,14 @@ describe('StakeManager', () => {
 
       await expect(await staker1.claimRewards(validator1, 5))
         .to.emit(stakeManager, 'ClaimedRewards')
-        .withArgs(staker1.address, validator1.owner.address, toBNWei('0.069063926940639267'))
+        .withArgs(staker1.address, validator1.validatorId.address, toBNWei('0.069063926940639267'))
       await staker2.claimRewards(validator1, 5)
       await validator1.claimCommissions(undefined, 5)
 
       const check1 = async () => {
         await expectBalance(staker1.signer, '7000.06906392', '250', '750')
         await expectBalance(staker2.signer, '6000.12271689', '750', '250')
-        await expectBalance(validator1.owner, '10000.01369863', '0', '0')
+        await expectBalance(validator1.validatorId, '10000.01369863', '0', '0')
 
         await staker1.expectRewards('0.01141552', validator1, 1)
         await staker2.expectRewards('0.01712328', validator1, 1)
@@ -1379,7 +1441,7 @@ describe('StakeManager', () => {
 
         await expectBalance(staker1.signer, '7000.21632420', '250', '750')
         await expectBalance(staker2.signer, '6000.40011415', '750', '250')
-        await expectBalance(validator1.owner, '10000.25114155', '0', '0')
+        await expectBalance(validator1.validatorId, '10000.25114155', '0', '0')
 
         await staker1.expectRewards('0', validator1, 0)
         await staker2.expectRewards('0', validator1, 0)
@@ -1834,7 +1896,7 @@ describe('StakeManager', () => {
         expectOwners: Validator[],
         expectNewCursor: number,
       ) => {
-        expect(result.owners).to.eql(expectOwners.map((x) => x.owner.address))
+        expect(result.owners).to.eql(expectOwners.map((x) => x.validatorId.address))
         expect(result.newCursor).to.equal(expectNewCursor)
       }
 
@@ -1850,6 +1912,41 @@ describe('StakeManager', () => {
       // howMany = 10
       _expect(
         await stakeManager.getValidatorOwners(0, 10),
+        [validator1, validator2, validator3, validator4, fixedValidator],
+        5,
+      )
+
+      // update onwer address
+      let result = await stakeManager.getValidatorOwners(0, 1) // before update
+      expect(result.owners).to.eql([validator1.validatorId.address])
+      const newOwner = accounts[accounts.length - 4]
+      await validator1.updateValidatorOwner(validator1, newOwner.address)
+      result = await stakeManager.getValidatorOwners(0, 1) // after update
+      expect(result.owners).to.eql([newOwner.address])
+    })
+
+    it('getValidatorIds()', async () => {
+      const _expect = (
+        result: { ids: string[]; newCursor: BigNumber },
+        expectOwners: Validator[],
+        expectNewCursor: number,
+      ) => {
+        expect(result.ids).to.eql(expectOwners.map((x) => x.validatorId.address))
+        expect(result.newCursor).to.equal(expectNewCursor)
+      }
+
+      // howMany = 2
+      _expect(await stakeManager.getValidatorIds(0, 2), [validator1, validator2], 2)
+      _expect(await stakeManager.getValidatorIds(2, 2), [validator3, validator4], 4)
+      _expect(await stakeManager.getValidatorIds(4, 2), [fixedValidator], 5)
+
+      // howMany = 3
+      _expect(await stakeManager.getValidatorIds(0, 3), [validator1, validator2, validator3], 3)
+      _expect(await stakeManager.getValidatorIds(3, 3), [validator4, fixedValidator], 5)
+
+      // howMany = 10
+      _expect(
+        await stakeManager.getValidatorIds(0, 10),
         [validator1, validator2, validator3, validator4, fixedValidator],
         5,
       )
@@ -1872,20 +1969,20 @@ describe('StakeManager', () => {
       await staker5.stake(Token.OAS, validator1, '5')
 
       // howMany = 2
-      _expect(await stakeManager.getStakers(0, 2), [fixedValidator.owner, staker1.signer], 2)
+      _expect(await stakeManager.getStakers(0, 2), [fixedValidator.validatorId, staker1.signer], 2)
       _expect(await stakeManager.getStakers(2, 2), [staker2.signer, staker3.signer], 4)
       _expect(await stakeManager.getStakers(4, 2), [staker4.signer, staker5.signer], 6)
       _expect(await stakeManager.getStakers(6, 2), [], 6)
 
       // howMany = 3
-      _expect(await stakeManager.getStakers(0, 3), [fixedValidator.owner, staker1.signer, staker2.signer], 3)
+      _expect(await stakeManager.getStakers(0, 3), [fixedValidator.validatorId, staker1.signer, staker2.signer], 3)
       _expect(await stakeManager.getStakers(3, 3), [staker3.signer, staker4.signer, staker5.signer], 6)
       _expect(await stakeManager.getStakers(6, 3), [], 6)
 
       // howMany = 10
       _expect(
         await stakeManager.getStakers(0, 10),
-        [fixedValidator.owner, staker1.signer, staker2.signer, staker3.signer, staker4.signer, staker5.signer],
+        [fixedValidator.validatorId, staker1.signer, staker2.signer, staker3.signer, staker4.signer, staker5.signer],
         6,
       )
     })
@@ -2101,6 +2198,17 @@ describe('StakeManager', () => {
       await checker(true, true, false, '500', 10)
       await checker(true, false, true, '500', 11)
       await checker(true, false, true, '500', 12)
+    })
+
+    it('getValidatorInfoV2()', async () => {
+      // before update
+      let result = await validator1.getInfoV2()
+      expect(result.owner).to.equal(validator1.validatorId.address)
+      // after update
+      const newOwner = accounts[accounts.length - 4]
+      await validator1.updateValidatorOwner(validator1, newOwner.address)
+      result = await validator1.getInfoV2()
+      expect(result.owner).to.equal(newOwner.address)
     })
 
     xit('[OBSOLETED] getUnstakes()', async () => {
@@ -2333,7 +2441,7 @@ describe('StakeManager', () => {
 
     it('getValidatorStakes(address,uint256) and getOperatorStakes()', async () => {
       const check = async (validator: Validator, epoch: number, exp: string) => {
-        const actual1 = await stakeManager['getValidatorStakes(address,uint256)'](validator.owner.address, epoch)
+        const actual1 = await stakeManager['getValidatorStakes(address,uint256)'](validator.validatorId.address, epoch)
         const actual2 = await stakeManager.getOperatorStakes(validator.operator.address, epoch)
         expect(actual1.toString()).to.equal(toWei(exp))
         expect(actual2.toString()).to.equal(toWei(exp))
@@ -2692,7 +2800,7 @@ describe('StakeManager', () => {
     it('getTotalRewards()', async () => {
       const checker = async (validators: Validator[], epochs: number, expectEther: string) => {
         let actual: BigNumber = await stakeManager.getTotalRewards(
-          validators.map((x) => x.owner.address),
+          validators.map((x) => x.validatorId.address),
           epochs,
         )
         expect(fromWei(actual.toString())).to.match(new RegExp(`^${expectEther}`))
