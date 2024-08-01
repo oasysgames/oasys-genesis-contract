@@ -67,12 +67,13 @@ describe('StakeManager', () => {
     expValidators: Validator[],
     expCandidates: boolean[],
     expStakes?: string[],
+    expBLSPublicKeys?: string[]
   ) => {
-    await expectValidators(await getEpoch(0), expValidators, expCandidates, expStakes)
+    await expectValidators(await getEpoch(0), expValidators, expCandidates, expStakes, expBLSPublicKeys)
   }
 
-  const expectNextValidators = async (expValidators: Validator[], expCandidates: boolean[], expStakes?: string[]) => {
-    await expectValidators(await getEpoch(1), expValidators, expCandidates, expStakes)
+  const expectNextValidators = async (expValidators: Validator[], expCandidates: boolean[], expStakes?: string[], expBLSPublicKeys?: string[]) => {
+    await expectValidators(await getEpoch(1), expValidators, expCandidates, expStakes, expBLSPublicKeys)
   }
 
   const expectValidators = async (
@@ -80,6 +81,7 @@ describe('StakeManager', () => {
     expValidators: Validator[],
     expCandidates: boolean[],
     expStakes?: string[],
+    expBLSPublicKeys?: string[],
     cursor = 0,
     howMany = 100,
     expNewCursor?: number,
@@ -90,6 +92,7 @@ describe('StakeManager', () => {
       expValidators,
       expCandidates,
       expStakes,
+      expBLSPublicKeys,
       expNewCursor,
     })
   }
@@ -116,6 +119,7 @@ describe('StakeManager', () => {
     expValidators: Validator[],
     expCandidates: boolean[],
     expStakes?: string[],
+    expBLSPublicKeys?: string[],
     cursor = 0,
     howMany = 100,
     expNewCursor?: number,
@@ -126,6 +130,7 @@ describe('StakeManager', () => {
       expValidators,
       expCandidates,
       expStakes,
+      expBLSPublicKeys,
       expNewCursor,
     })
   }
@@ -134,11 +139,13 @@ describe('StakeManager', () => {
     owners: string[]
     operators: string[]
     stakes: BigNumber[]
+    blsPublicKeys: string[]
     candidates: boolean[]
     newCursor: BigNumber
     expValidators: Validator[]
     expCandidates: boolean[]
     expStakes?: string[]
+    expBLSPublicKeys?: string[]
     expNewCursor?: number
   }) => {
     expect(params.owners).to.eql(params.expValidators.map((x) => x.owner.address))
@@ -148,6 +155,9 @@ describe('StakeManager', () => {
       expect(params.stakes.map((x: any) => fromWei(x.toString()))).to.eql(params.expStakes)
     }
     expect(params.newCursor).to.equal(params.expNewCursor ?? params.owners.length)
+    if (params.expBLSPublicKeys) {
+      expect(params.blsPublicKeys).to.eql(params.expBLSPublicKeys)
+    }
   }
 
   const expectBalance = async (
@@ -402,85 +412,123 @@ describe('StakeManager', () => {
       await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
     })
 
+    it('updateBLSPublicKey()', async () => {
+      const ethPrivKey = '0xd1c71e71b06e248c8dbe94d49ef6d6b0d64f5d71b1e33a0f39e14dadb070304a'
+      const emptyBLSPubKey = '0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+      const blsPubKey = "0x9393c6ce7b837418a3409f464026569b5aeace7cfc05ccd9535a36d9de4613131b955dfc5c4d61f030922d3c17b211af"
+
+      const newBLSPubKey = "0x16e08cfa832b113a1c9042b3579fc9000973417fb2295568396ffe74e6445457278382ab121d513f4a0ecf22144d2c93"
+
+      await validator.joinValidator()
+
+      // invalid length
+      let tx = validator.updateBLSPublicKey(ethPrivKey)
+      await expect(tx).to.revertedWith('InvalidBLSLength()')
+
+      // empty
+      tx = validator.updateBLSPublicKey(emptyBLSPubKey)
+      await expect(tx).to.revertedWith('EmptyBLS()')
+
+      // register at first time
+      await expect(await validator.updateBLSPublicKey(blsPubKey))
+        .to.emit(stakeManager, 'BLSPublicKeyUpdated')
+        .withArgs(validator.owner.address, "0x", blsPubKey)
+      expect((await validator.getInfo()).blsPublicKey).to.equal(blsPubKey)
+
+      // fail: from operator
+      tx = validator.updateBLSPublicKey(newBLSPubKey, operator)
+      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
+
+      // fail: from attacker
+      tx = validator.updateBLSPublicKey(newBLSPubKey, attacker)
+      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
+
+      // update
+      await expect(await validator.updateBLSPublicKey(newBLSPubKey))
+        .to.emit(stakeManager, 'BLSPublicKeyUpdated')
+        .withArgs(validator.owner.address, blsPubKey, newBLSPubKey)
+      expect((await validator.getInfo()).blsPublicKey).to.equal(newBLSPubKey)
+    })
+
     it('deactivateValidator() and activateValidator()', async () => {
       await validator.joinValidator()
       await staker1.stake(Token.OAS, validator, '500')
 
-      await expectValidators(await getEpoch(0), [validator], [false], ['0'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [false], ['0'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       // from owner
       await validator.deactivateValidator([await getEpoch(1)], owner)
 
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [false], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [false], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [false], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.false
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       await validator.deactivateValidator([await getEpoch(2), await getEpoch(3), await getEpoch(5)], owner)
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(2), [validator], [false], ['500'])
-      await expectValidators(await getEpoch(3), [validator], [false], ['500'])
-      await expectValidators(await getEpoch(4), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(5), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(2), [validator], [false], ['500'], ['0x'])
+      await expectValidators(await getEpoch(3), [validator], [false], ['500'], ['0x'])
+      await expectValidators(await getEpoch(4), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(5), [validator], [false], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       await validator.activateValidator([await getEpoch(3)])
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(2), [validator], [false], ['500'])
-      await expectValidators(await getEpoch(3), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(4), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(5), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(2), [validator], [false], ['500'], ['0x'])
+      await expectValidators(await getEpoch(3), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(4), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(5), [validator], [false], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [false], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [false], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [false], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.false
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [false], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [false], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [false], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.false
 
       await toNextEpoch()
@@ -488,20 +536,20 @@ describe('StakeManager', () => {
       // from operator
       await validator.deactivateValidator([await getEpoch(1)], operator)
 
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [false], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [false], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [false], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [false], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.false
 
       await toNextEpoch()
 
-      await expectValidators(await getEpoch(0), [validator], [true], ['500'])
-      await expectValidators(await getEpoch(1), [validator], [true], ['500'])
+      await expectValidators(await getEpoch(0), [validator], [true], ['500'], ['0x'])
+      await expectValidators(await getEpoch(1), [validator], [true], ['500'], ['0x'])
       expect((await validator.getInfo()).active).to.be.true
 
       // from attacker
@@ -1703,9 +1751,9 @@ describe('StakeManager', () => {
 
       // check pagination
       // howMany = 2
-      await expectValidators(await getEpoch(0), [validator1, validator2], [o, x], ['501', '499'], 0, 2, 2)
-      await expectValidators(await getEpoch(0), [validator3, validator4], [o, x], ['502', '0'], 2, 2, 4)
-      await expectValidators(await getEpoch(0), [fixedValidator], [o], ['500'], 4, 2, 5)
+      await expectValidators(await getEpoch(0), [validator1, validator2], [o, x], ['501', '499'], ['0x', '0x'], 0, 2, 2)
+      await expectValidators(await getEpoch(0), [validator3, validator4], [o, x], ['502', '0'], ['0x', '0x'], 2, 2, 4)
+      await expectValidators(await getEpoch(0), [fixedValidator], [o], ['500'], ['0x'], 4, 2, 5)
 
       // howMany = 4
       await expectValidators(
@@ -1713,11 +1761,12 @@ describe('StakeManager', () => {
         [validator1, validator2, validator3, validator4],
         [o, x, o, x],
         ['501', '499', '502', '0'],
+        ['0x', '0x', '0x', '0x'],
         0,
         4,
         4,
       )
-      await expectValidators(await getEpoch(0), [fixedValidator], [o], ['500'], 4, 2, 5)
+      await expectValidators(await getEpoch(0), [fixedValidator], [o], ['500'], ['0x'], 4, 2, 5)
 
       // howMany = 10
       await expectValidators(
@@ -1725,6 +1774,7 @@ describe('StakeManager', () => {
         [validator1, validator2, validator3, validator4, fixedValidator],
         [o, x, o, x, o],
         ['501', '499', '502', '0', '500'],
+        ['0x', '0x', '0x', '0x', '0x'],
         0,
         10,
         5,

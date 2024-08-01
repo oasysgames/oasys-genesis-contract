@@ -21,6 +21,12 @@ error SameAsOwner();
 // Commission rate is too large.
 error OverRate();
 
+// BLS public key length is invalid.
+error InvalidBLSLength();
+
+// BLS public key is empty.
+error EmptyBLS();
+
 /**
  * @title Validator
  */
@@ -43,6 +49,19 @@ library Validator {
         if (operator == validator.owner) revert SameAsOwner();
 
         validator.operator = operator;
+    }
+
+    function updateBLSPublicKey(IStakeManager.Validator storage validator, bytes calldata blsPublicKey) internal {
+        if (blsPublicKey.length != 48) revert InvalidBLSLength();
+        // verify not empty
+        if (
+            uint256(bytes32(blsPublicKey[0:32])) == 0 &&
+            uint128(bytes16(blsPublicKey[32:48])) == 0
+        ) {
+            revert EmptyBLS();
+        }
+
+        validator.blsPublicKey = blsPublicKey;
     }
 
     function activate(

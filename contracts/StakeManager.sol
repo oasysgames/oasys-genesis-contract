@@ -209,6 +209,20 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
+    function updateBLSPublicKey(bytes calldata blsPublicKey) external validatorExists(msg.sender) {
+        address owner = msg.sender;
+
+        Validator storage validator = validators[owner];
+        bytes memory oldBLSPublicKey = validator.blsPublicKey;
+
+        validator.updateBLSPublicKey(blsPublicKey);
+
+        emit BLSPublicKeyUpdated(owner, oldBLSPublicKey, blsPublicKey);
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
     function activateValidator(address validator, uint256[] memory epochs)
         external
         onlyValidatorOwnerOrOperator(validator)
@@ -384,11 +398,12 @@ contract StakeManager is IStakeManager, System {
             address[] memory owners,
             address[] memory operators,
             uint256[] memory stakes,
+            bytes[] memory blsPublicKeys,
             bool[] memory candidates,
             uint256 newCursor
         )
     {
-        (owners, operators, , , stakes, candidates, newCursor) = candidateManager.getAll(epoch, cursor, howMany);
+        (owners, operators, , , stakes, blsPublicKeys, candidates, newCursor) = candidateManager.getAll(epoch, cursor, howMany);
     }
 
     /**
@@ -429,7 +444,14 @@ contract StakeManager is IStakeManager, System {
     function getValidatorInfo(address validator, uint256 epoch)
         external
         view
-        returns (address operator, bool active, bool jailed, bool candidate, uint256 stakes)
+        returns (
+            address operator,
+            bool active,
+            bool jailed,
+            bool candidate,
+            uint256 stakes,
+            bytes memory blsPublicKey
+        )
     {
         if (epoch == 0) epoch = environment.epoch();
 
@@ -438,9 +460,10 @@ contract StakeManager is IStakeManager, System {
         active = !_validator.isInactive(epoch);
         jailed = _validator.isJailed(epoch);
         stakes = _validator.getTotalStake(epoch);
+        blsPublicKey = _validator.blsPublicKey;
         candidate = active && !jailed && stakes >= environment.findValue(epoch).validatorThreshold;
 
-        return (operator, active, jailed, candidate, stakes);
+        return (operator, active, jailed, candidate, stakes, blsPublicKey);
     }
 
     /**

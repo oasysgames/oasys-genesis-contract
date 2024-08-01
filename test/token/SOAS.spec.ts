@@ -130,8 +130,8 @@ describe('SOAS', () => {
       await expectTotalSupply(95)
 
       // transfer.
-      await soas.connect(genesis).allow(originalClaimer.address, allowedClaimer.address)
-      await soas.connect(originalClaimer).transfer(allowedClaimer.address, toWei('10'))
+      await soas.connect(genesis)['allow(address,address)'](originalClaimer.address, allowedClaimer.address)
+      await soas.connect(originalClaimer)['transfer(address,uint256)'](allowedClaimer.address, toWei('10'))
       await expectBalance(originalClaimer, 5, 85)
       await expectBalance(allowedClaimer, 0, 10)
       await expectTotalSupply(95)

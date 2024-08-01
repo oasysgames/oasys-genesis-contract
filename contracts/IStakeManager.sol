@@ -21,6 +21,7 @@ interface IStakeManager {
     event ValidatorSlashed(address indexed validator);
     event ValidatorJailed(address indexed validator, uint256 until);
     event OperatorUpdated(address indexed validator, address oldOperator, address newOperator);
+    event BLSPublicKeyUpdated(address indexed validator, bytes oldBLSPublicKey, bytes newBLSPublicKey);
     event Staked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
     event ReStaked(address indexed staker, address indexed validator, uint256 amount);
     event Unstaked(address indexed staker, address indexed validator, Token.Type token, uint256 amount);
@@ -55,6 +56,9 @@ interface IStakeManager {
         mapping(uint256 => uint256) blocks;
         // Number of slashes per epoch
         mapping(uint256 => uint256) slashes;
+        // ----- added from v1.4.0 -----
+        // BLS public key used for fast finality
+        bytes blsPublicKey;
     }
 
     struct Staker {
@@ -118,6 +122,12 @@ interface IStakeManager {
      * @param operator New address used for block signing.
      */
     function updateOperator(address operator) external;
+
+    /**
+     * Update the BLS public key.
+     * @param blsPublicKey New BLS public key.
+     */
+    function updateBLSPublicKey(bytes calldata blsPublicKey) external;
 
     /**
      * Change the validator status to active.
@@ -244,6 +254,7 @@ interface IStakeManager {
      * @return owners List of validator owner addresses.
      * @return operators List of addresses for block signing.
      * @return stakes List of total staked amounts for each validator.
+     * @return blsPublicKeys List of BLS public keys.
      * @return candidates List of whether new blocks can be produced.
      * @return newCursor Cursor that should be used in the next request.
      */
@@ -258,6 +269,7 @@ interface IStakeManager {
             address[] memory owners,
             address[] memory operators,
             uint256[] memory stakes,
+            bytes[] memory blsPublicKeys,
             bool[] memory candidates,
             uint256 newCursor
         );
@@ -304,7 +316,8 @@ interface IStakeManager {
             bool active,
             bool jailed,
             bool candidate,
-            uint256 stakes
+            uint256 stakes,
+            bytes memory blsPublicKey
         );
 
     /**

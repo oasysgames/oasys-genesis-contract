@@ -7,6 +7,7 @@
 /coverage.json
 /typechain
 /typechain-types
+/tmp
 
 .DS_Store
 .vscode

@@ -24,6 +24,7 @@ interface ValidatorInfo {
   jailed: boolean
   candidate: boolean
   stakes: BigNumber
+  blsPublicKey: string
   commissionRate: BigNumber
 }
 
@@ -63,6 +64,10 @@ class Validator {
 
   updateOperator(newOperator: string, sender?: Account) {
     return this._contract.connect(sender || this.owner).updateOperator(newOperator, { gasPrice })
+  }
+
+  updateBLSPublicKey(blsPubKey: string, sender?: Account) {
+    return this._contract.connect(sender || this.owner).updateBLSPublicKey(blsPubKey, { gasPrice })
   }
 
   activateValidator(epochs: number[], sender?: Account) {
