@@ -50,4 +50,10 @@ library EnvironmentValue {
             revert ValidationError("jailPeriod is too small.");
         }
     }
+
+    function validateEpoch(IEnvironment.EnvironmentValue memory value) internal pure {
+        if (value.blockPeriod * value.epochPeriod != 1 days) {
+            revert ValidationError("blockPeriod*epochPeriod is not equal to 1day.");
+        }
+    }
 }

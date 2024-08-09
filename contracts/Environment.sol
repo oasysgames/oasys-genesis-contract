@@ -7,6 +7,7 @@ import { IEnvironment } from "./IEnvironment.sol";
 import { UpdateHistories } from "./lib/UpdateHistories.sol";
 import { PastEpoch } from "./lib/Errors.sol";
 import { EnvironmentValue as EnvironmentValueLib } from "./lib/EnvironmentValue.sol";
+import { Chain } from "./lib/Chain.sol";
 
 // Not executable in the last block of epoch.
 error OnlyNotLastBlock();
@@ -146,6 +147,10 @@ contract Environment is IEnvironment, System {
      */
     function _updateValue(EnvironmentValue memory newValue) private {
         newValue.validate();
+
+        if (Chain.isMainnet() || Chain.isTestnet()) {
+            newValue.validateEpoch();
+        }
 
         uint256 length = updates.length;
         if (length == 0 || values[length - 1].started(block.number)) {
