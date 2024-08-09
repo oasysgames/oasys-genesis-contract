@@ -569,7 +569,8 @@ contract StakeManager is IStakeManager, System {
             epoch += 1;
             IEnvironment.EnvironmentValue memory env = environment.findValue(epoch);
             for (uint256 j = 0; j < length; j++) {
-                rewards += validators[_validators[j]].getRewards(env, epoch);
+                (uint256 _rewards, ) = validators[_validators[j]].getRewards(env, epoch);
+                rewards += _rewards;
             }
         }
 

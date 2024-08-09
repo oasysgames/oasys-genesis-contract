@@ -100,7 +100,7 @@ library Staker {
                 getStake(staker, validator.owner, Token.Type.sOAS, lastClaim);
             if (_stake == 0) continue;
 
-            uint256 validatorRewards = validator.getRewardsWithoutCommissions(
+            (uint256 validatorRewards, uint256 validatorTotalStake) = validator.getRewardsWithoutCommissions(
                 environment.findValue(lastClaim),
                 lastClaim
             );
@@ -109,7 +109,7 @@ library Staker {
             rewards += Math.share(
                 validatorRewards,
                 _stake,
-                validator.getTotalStake(lastClaim),
+                validatorTotalStake,
                 Constants.REWARD_PRECISION
             );
         }
