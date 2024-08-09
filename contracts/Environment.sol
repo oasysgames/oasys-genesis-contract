@@ -71,14 +71,16 @@ contract Environment is IEnvironment, System {
      * @inheritdoc IEnvironment
      */
     function isFirstBlock() external view returns (bool) {
-        return (block.number) % value().epochPeriod == 0;
+        EnvironmentValue storage current = _value();
+        return (block.number - current.startBlock) % current.epochPeriod == 0;
     }
 
     /**
      * @inheritdoc IEnvironment
      */
     function isLastBlock() public view returns (bool) {
-        return (block.number + 1) % value().epochPeriod == 0;
+        EnvironmentValue storage current = _value();
+        return (block.number - current.startBlock + 1) % current.epochPeriod == 0;
     }
 
     /**
