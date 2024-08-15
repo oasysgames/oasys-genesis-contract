@@ -15,6 +15,4 @@ library Constants {
     uint256 internal constant MIN_JAIL_THRESHOLD = 1;
     uint256 internal constant MIN_JAIL_PERIOD = 1;
     uint256 internal constant MAX_COMMISSION_RATE = 100;
-    uint256 internal constant MAINNET_CHAIN_ID = 248;
-    uint256 internal constant TESTNET_CHAIN_ID = 9372;
 }
