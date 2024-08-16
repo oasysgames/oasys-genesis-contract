@@ -55,14 +55,14 @@ library UpdateHistories {
     }
 
     function find(
-        uint256[] memory epochs,
-        IEnvironment.EnvironmentValue[] memory values,
+        uint256[] storage epochs,
+        IEnvironment.EnvironmentValue[] storage values,
         uint256 epoch
-    ) internal pure returns (IEnvironment.EnvironmentValue memory) {
+    ) internal view returns (IEnvironment.EnvironmentValue storage) {
         uint256 length = epochs.length;
         if (epochs[length - 1] <= epoch) return values[length - 1];
         if (length > 1 && epochs[length - 2] <= epoch) return values[length - 2];
-        uint256 idx = mBinarySearch(epochs, epoch, 0, length);
+        uint256 idx = sBinarySearch(epochs, epoch, 0, length);
         return values[idx];
     }
 
@@ -115,19 +115,6 @@ library UpdateHistories {
         uint256 center = (head + tail) / 2;
         if (epochs[center] > epoch) return sBinarySearch(epochs, epoch, head, center);
         if (epochs[center] < epoch) return sBinarySearch(epochs, epoch, center + 1, tail);
-        return center;
-    }
-
-    function mBinarySearch(
-        uint256[] memory epochs,
-        uint256 epoch,
-        uint256 head,
-        uint256 tail
-    ) internal pure returns (uint256) {
-        if (head == tail) return tail - 1;
-        uint256 center = (head + tail) / 2;
-        if (epochs[center] > epoch) return mBinarySearch(epochs, epoch, head, center);
-        if (epochs[center] < epoch) return mBinarySearch(epochs, epoch, center + 1, tail);
         return center;
     }
 }
