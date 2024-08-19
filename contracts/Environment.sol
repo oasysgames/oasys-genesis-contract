@@ -47,11 +47,11 @@ contract Environment is IEnvironment, System {
         if (isLastBlock()) revert OnlyNotLastBlock();
         if (newValue.startEpoch <= epoch()) revert PastEpoch();
 
-        EnvironmentValue storage next = _getNext();
-        if (next.started(block.number)) {
-            newValue.startBlock = next.nextStartBlock(newValue);
+        EnvironmentValue storage latest = _latestValue();
+        if (latest.started(block.number)) {
+            newValue.startBlock = latest.nextStartBlock(newValue);
         } else {
-            newValue.startBlock = _getCurrent().nextStartBlock(newValue);
+            newValue.startBlock = _prevValue().nextStartBlock(newValue);
         }
         _updateValue(newValue);
     }
@@ -64,40 +64,40 @@ contract Environment is IEnvironment, System {
      * @inheritdoc IEnvironment
      */
     function epoch() public view returns (uint256) {
-        EnvironmentValue storage next = _getNext();
-        return next.started(block.number) ? next.epoch() : _getCurrent().epoch();
+        return _value().epoch();
     }
 
     /**
      * @inheritdoc IEnvironment
      */
     function isFirstBlock() external view returns (bool) {
-        return (block.number) % value().epochPeriod == 0;
+        EnvironmentValue storage current = _value();
+        return (block.number - current.startBlock) % current.epochPeriod == 0;
     }
 
     /**
      * @inheritdoc IEnvironment
      */
     function isLastBlock() public view returns (bool) {
-        return (block.number + 1) % value().epochPeriod == 0;
+        EnvironmentValue storage current = _value();
+        return (block.number - current.startBlock + 1) % current.epochPeriod == 0;
     }
 
     /**
      * @inheritdoc IEnvironment
      */
     function value() public view returns (EnvironmentValue memory) {
-        EnvironmentValue storage next = _getNext();
-        return next.started(block.number) ? next : _getCurrent();
+        return _value();
     }
 
     /**
      * @inheritdoc IEnvironment
      */
     function nextValue() external view returns (EnvironmentValue memory) {
-        EnvironmentValue memory current = value();
-        EnvironmentValue storage next = _getNext();
-        uint256 nextStartBlock = current.startBlock + (epoch() - current.startEpoch + 1) * current.epochPeriod;
-        return next.started(nextStartBlock) ? next : current;
+        EnvironmentValue storage current = _value();
+        EnvironmentValue storage latest = _latestValue();
+        uint256 nextStartBlock = current.startBlock + (current.epoch() - current.startEpoch + 1) * current.epochPeriod;
+        return latest.started(nextStartBlock) ? latest : current;
     }
 
     /**
@@ -112,10 +112,19 @@ contract Environment is IEnvironment, System {
      *********************/
 
     /**
-     * Returns the current (or previous) environment value.
+    * Returns the environment value at the current epoch
+    * @return Environment value.
+    */
+    function _value() internal view returns (EnvironmentValue storage) {
+        EnvironmentValue storage latest = _latestValue();
+        return latest.started(block.number) ? latest : _prevValue();
+    }
+
+    /**
+     * Returns the previous (or latest) environment value.
      * @return Environment value.
      */
-    function _getCurrent() internal view returns (EnvironmentValue storage) {
+    function _prevValue() internal view returns (EnvironmentValue storage) {
         uint256 length = values.length;
         if (length == 1) {
             return values[0];
@@ -124,27 +133,27 @@ contract Environment is IEnvironment, System {
     }
 
     /**
-     * Returns the next (or current) environment value.
+     * Returns the latest environment value.
      * @return Environment value.
      */
-    function _getNext() internal view returns (EnvironmentValue storage) {
+    function _latestValue() internal view returns (EnvironmentValue storage) {
         return values[values.length - 1];
     }
 
     /**
      * Validate the new environment value and if there are no problems, save to storage.
-     * @param _value New environment value.
+     * @param newValue New environment value.
      */
-    function _updateValue(EnvironmentValue memory _value) private {
-        _value.validate();
+    function _updateValue(EnvironmentValue memory newValue) private {
+        newValue.validate();
 
         uint256 length = updates.length;
         if (length == 0 || values[length - 1].started(block.number)) {
-            updates.push(_value.startEpoch);
-            values.push(_value);
+            updates.push(newValue.startEpoch);
+            values.push(newValue);
         } else {
-            updates[length - 1] = _value.startEpoch;
-            values[length - 1] = _value;
+            updates[length - 1] = newValue.startEpoch;
+            values[length - 1] = newValue;
         }
     }
 }

@@ -152,21 +152,21 @@ library Validator {
         IStakeManager.Validator storage validator,
         IEnvironment.EnvironmentValue memory env,
         uint256 epoch
-    ) internal view returns (uint256 rewards) {
-        if (isInactive(validator, epoch) || isJailed(validator, epoch)) return 0;
+    ) internal view returns (uint256 rewards, uint256 totalStake) {
+        if (isInactive(validator, epoch) || isJailed(validator, epoch)) return (0, 0);
 
-        uint256 _stake = getTotalStake(validator, epoch);
+        totalStake = getTotalStake(validator, epoch);
 
         if (epoch >= 73) {
-            if (_stake < env.validatorThreshold) return 0;
-            rewards = (_stake * 2612) / 1e7;
+            if (totalStake < env.validatorThreshold) return (0, totalStake);
+            rewards = (totalStake * 2612) / 1e7;
         } else {
-            if (_stake == 0) return 0;
+            if (totalStake == 0) return (0, 0);
 
             rewards =
-                (_stake * Math.percent(env.rewardRate, Constants.MAX_REWARD_RATE, Constants.REWARD_PRECISION)) /
+                (totalStake * Math.percent(env.rewardRate, Constants.MAX_REWARD_RATE, Constants.REWARD_PRECISION)) /
                 10**Constants.REWARD_PRECISION;
-            if (rewards == 0) return 0;
+            if (rewards == 0) return (0, totalStake);
 
             rewards *= Math.percent(
                 env.blockPeriod * env.epochPeriod,
@@ -181,22 +181,26 @@ library Validator {
             uint256 blocks = validator.blocks[epoch];
             rewards = Math.share(rewards, blocks - slashes, blocks, Constants.REWARD_PRECISION);
         }
-        return rewards;
+        return (rewards, totalStake);
     }
 
     function getRewardsWithoutCommissions(
         IStakeManager.Validator storage validator,
         IEnvironment.EnvironmentValue memory env,
         uint256 epoch
-    ) internal view returns (uint256) {
-        uint256 rewards = getRewards(validator, env, epoch);
-        if (rewards == 0) return 0;
+    ) internal view returns (uint256 rewards, uint256 totalStake) {
+        (rewards, totalStake) = getRewards(validator, env, epoch);
+        if (rewards == 0) return (0, totalStake);
 
-        if (env.commissionRate == 0) return rewards;
-
-        return
-            rewards -
-            Math.share(rewards, env.commissionRate, Constants.MAX_COMMISSION_RATE, Constants.REWARD_PRECISION);
+        if (env.commissionRate > 0) {
+            rewards -= Math.share(
+                rewards,
+                env.commissionRate,
+                Constants.MAX_COMMISSION_RATE,
+                Constants.REWARD_PRECISION
+            );
+        }
+        return (rewards, totalStake);
     }
 
     function getCommissions(
@@ -214,7 +218,7 @@ library Validator {
             lastClaim += 1;
             IEnvironment.EnvironmentValue memory env = environment.findValue(lastClaim);
 
-            uint256 rewards = getRewards(validator, env, lastClaim);
+            (uint256 rewards, ) = getRewards(validator, env, lastClaim);
             if (rewards == 0) continue;
 
             if (env.commissionRate == 0) continue;

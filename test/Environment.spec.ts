@@ -61,6 +61,14 @@ describe('Environment', () => {
   })
 
   describe('updateValue()', async () => {
+    it('startBlock should be set', async () => {
+      await initialize()
+
+      await environment.updateValue({ ...initialValue, startEpoch: 5 })
+
+      expect((await environment.values(1)).startBlock).to.equal(400)
+    })
+
     it('startEpoch is past', async () => {
       await initialize()
 
@@ -144,6 +152,39 @@ describe('Environment', () => {
       await expectEpoch(300, 399, 4)
       await expectEpoch(400, 599, 5)
     })
+  })
+
+  it('isFirstBlock() && isLastBlock()', async () => {
+    const expects = async ([start, end]: number[], epoch: number) => {
+      if (start > end || start < (await getBlockNumber())) throw new Error('invalid range')
+
+      for (let n = start; n <= end; n++) {
+        await mining(n)
+        expect(await environment.epoch()).to.equal(epoch, `n=${n}`)
+        expect(await environment.isFirstBlock()).to.equal(n === start, `n=${n}`)
+        expect(await environment.isLastBlock()).to.equal(n === end, `n=${n}`)
+      }
+    }
+
+    await initialize()
+    await expects([100, 199], 2)
+    await expects([200, 299], 3)
+
+    await environment.updateValue({ ...initialValue, startEpoch: 6, epochPeriod: 150 })
+
+    await expects([300, 399], 4)
+    await expects([400, 499], 5)
+
+    await expects([500, 649], 6)
+    await expects([650, 799], 7)
+
+    await environment.updateValue({ ...initialValue, startEpoch: 10, epochPeriod: 50 })
+
+    await expects([800, 949], 8)
+    await expects([950, 1099], 9)
+
+    await expects([1100, 1149], 10)
+    await expects([1150, 1199], 11)
   })
 
   it('value() and nextValue()', async () => {
