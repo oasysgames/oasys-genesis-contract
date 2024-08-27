@@ -249,7 +249,7 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function claimCommissions(address validator, uint256 epochs) external validatorExists(msg.sender) {
+    function claimCommissions(address /*validator*/, uint256 epochs) external validatorExists(msg.sender) {
         uint256 amount = validators[msg.sender].claimCommissions(environment, epochs);
         emit ClaimedCommissions(msg.sender, amount);
 
@@ -297,9 +297,9 @@ contract StakeManager is IStakeManager, System {
      * @inheritdoc IStakeManager
      */
     function unstake(
-        address validator,
-        Token.Type token,
-        uint256 amount
+        address /*validator*/,
+        Token.Type /*token*/,
+        uint256 /*amount*/
     ) external {
         revert ObsoletedMethod();
     }
@@ -317,6 +317,7 @@ contract StakeManager is IStakeManager, System {
         amount = _staker.unstake(environment, validators[validator], token, amount);
         if (amount == 0) revert NoAmount();
 
+        // solhint-disable-next-line not-rely-on-time
         _staker.lockedUnstakes.push(LockedUnstake(token, amount, block.timestamp + 10 days));
         stakeUpdates.sub(stakeAmounts, environment.epoch() + 1, amount);
 
@@ -328,7 +329,7 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function claimUnstakes(address staker) external stakerExists(msg.sender) {
+    function claimUnstakes(address /*staker*/) external stakerExists(msg.sender) {
         stakers[msg.sender].claimUnstakes(environment);
     }
 
@@ -339,6 +340,7 @@ contract StakeManager is IStakeManager, System {
         LockedUnstake storage request = stakers[msg.sender].lockedUnstakes[lockedUnstake];
 
         uint256 unlockTime = request.unlockTime;
+        // solhint-disable-next-line not-rely-on-time
         if (block.timestamp < unlockTime) revert Locked();
         if (unlockTime == 0) revert AlreadyClaimed();
 
@@ -352,7 +354,7 @@ contract StakeManager is IStakeManager, System {
      * @inheritdoc IStakeManager
      */
     function claimRewards(
-        address staker,
+        address /*staker*/,
         address validator,
         uint256 epochs
     ) external validatorExists(validator) stakerExists(msg.sender) {
@@ -515,10 +517,12 @@ contract StakeManager is IStakeManager, System {
         )
     {
         LockedUnstake memory _unstake = stakers[staker].lockedUnstakes[lockedUnstake];
+
         return (
             _unstake.token,
             _unstake.amount,
             _unstake.unlockTime,
+            // solhint-disable-next-line not-rely-on-time
             _unstake.unlockTime != 0 && block.timestamp >= _unstake.unlockTime
         );
     }
@@ -554,6 +558,7 @@ contract StakeManager is IStakeManager, System {
             tokens[i] = _unstake.token;
             amounts[i] = _unstake.amount;
             unlockTimes[i] = _unstake.unlockTime;
+            // solhint-disable-next-line not-rely-on-time
             claimable[i] = _unstake.unlockTime != 0 && block.timestamp >= _unstake.unlockTime;
         }
 

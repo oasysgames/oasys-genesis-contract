@@ -30,6 +30,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
      * @param _stakeManager Address of the StakeManager contract.
      * @param _highStakes Address of the AddressList contract.
      */
+    // solhint-disable-next-line func-visibility
     constructor(address _environment, address _stakeManager, address _highStakes) {
         if (_environment == address(0)) revert NullAddress();
         if (_stakeManager == address(0)) revert NullAddress();

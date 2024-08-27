@@ -56,7 +56,7 @@ interface IStakeManager {
         mapping(uint256 => uint256) blocks;
         // Number of slashes per epoch
         mapping(uint256 => uint256) slashes;
-        // ----- added from v1.4.0 -----
+        // ----- added from v1.6.0 -----
         // BLS public key used for fast finality
         bytes blsPublicKey;
     }
