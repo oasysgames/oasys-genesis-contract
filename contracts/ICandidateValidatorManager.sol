@@ -19,6 +19,7 @@ interface ICandidateValidatorManager {
      * @return actives List of activation status.
      * @return jailed List of jailing status.
      * @return stakes List of total staked amounts for each validator.
+     * @return blsPublicKeys List of BLS public keys.
      * @return candidates List of whether new blocks can be produced.
      * @return newCursor Cursor that should be used in the next request.
      */
@@ -35,6 +36,7 @@ interface ICandidateValidatorManager {
             bool[] memory actives,
             bool[] memory jailed,
             uint256[] memory stakes,
+            bytes[] memory blsPublicKeys,
             bool[] memory candidates,
             uint256 newCursor
         );
@@ -49,6 +51,7 @@ interface ICandidateValidatorManager {
      * @return actives List of activation status.
      * @return jailed List of jailing status.
      * @return stakes List of total staked amounts for each validator.
+     * @return blsPublicKeys List of BLS public keys.
      * @return candidates List of whether new blocks can be produced.
      * @return newCursor Cursor that should be used in the next request.
      */
@@ -65,6 +68,7 @@ interface ICandidateValidatorManager {
             bool[] memory actives,
             bool[] memory jailed,
             uint256[] memory stakes,
+            bytes[] memory blsPublicKeys,
             bool[] memory candidates,
             uint256 newCursor
         );

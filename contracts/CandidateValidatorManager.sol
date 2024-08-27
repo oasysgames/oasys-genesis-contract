@@ -30,6 +30,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
      * @param _stakeManager Address of the StakeManager contract.
      * @param _highStakes Address of the AddressList contract.
      */
+    // solhint-disable-next-line func-visibility
     constructor(address _environment, address _stakeManager, address _highStakes) {
         if (_environment == address(0)) revert NullAddress();
         if (_stakeManager == address(0)) revert NullAddress();
@@ -70,13 +71,14 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
             bool[] memory actives,
             bool[] memory jailed,
             uint256[] memory stakes,
+            bytes[] memory blsPublicKeys,
             bool[] memory candidates,
             uint256 newCursor
         )
     {
         if (epoch == 0) epoch = environment.epoch();
         (owners, newCursor) = stakeManager.getValidatorOwners(cursor, howMany);
-        (operators, actives, jailed, stakes, candidates) = _getValidatorInfos(owners, epoch);
+        (operators, actives, jailed, stakes, blsPublicKeys, candidates) = _getValidatorInfos(owners, epoch);
     }
 
     /**
@@ -95,6 +97,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
             bool[] memory actives,
             bool[] memory jailed,
             uint256[] memory stakes,
+            bytes[] memory blsPublicKeys,
             bool[] memory candidates,
             uint256 newCursor
         )
@@ -102,7 +105,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
         if (epoch < environment.epoch()) revert PastEpoch();
 
         (owners, newCursor) = highStakes.list(cursor, howMany);
-        (operators, actives, jailed, stakes, candidates) = _getValidatorInfos(owners, epoch);
+        (operators, actives, jailed, stakes, blsPublicKeys, candidates) = _getValidatorInfos(owners, epoch);
     }
 
     /*********************
@@ -158,6 +161,7 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
             bool[] memory actives,
             bool[] memory jailed,
             uint256[] memory stakes,
+            bytes[] memory blsPublicKeys,
             bool[] memory candidates
         )
     {
@@ -166,10 +170,11 @@ contract CandidateValidatorManager is ICandidateValidatorManager {
         actives = new bool[](length);
         jailed = new bool[](length);
         stakes = new uint256[](length);
+        blsPublicKeys = new bytes[](length);
         candidates = new bool[](length);
 
         for (uint256 i = 0; i < length; i++) {
-            (operators[i], actives[i], jailed[i], candidates[i], stakes[i]) = stakeManager.getValidatorInfo(
+            (operators[i], actives[i], jailed[i], candidates[i], stakes[i], blsPublicKeys[i]) = stakeManager.getValidatorInfo(
                 owners[i],
                 epoch
             );
