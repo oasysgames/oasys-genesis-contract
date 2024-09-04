@@ -73,6 +73,9 @@ contract StakeManager is IStakeManager, System {
     address[] public stakerSigners;
     // A contract that manages candidate validators
     ICandidateValidatorManager public candidateManager;
+    // Mapping of BLS public key to owner
+    // The first 32 bytes of the BLS public key is used as the key.
+    mapping(bytes32 => address) public blsPublicKeyToOwner;
 
     /*************
      * Modifiers *
@@ -172,6 +175,8 @@ contract StakeManager is IStakeManager, System {
 
     /**
      * @inheritdoc IStakeManager
+     * @notice DOS attack can be possible as anyone can call this function.
+     * A developer should avoid iteration of `validatorOwners`.
      */
     function joinValidator(address operator) external {
         address owner = msg.sender;
@@ -213,16 +218,16 @@ contract StakeManager is IStakeManager, System {
         address owner = msg.sender;
 
         // BLS public key should be unique, as it is identifier of a vote.
-        for (uint256 i = 0; i < validatorOwners.length; i++) {
-            if (keccak256(validators[validatorOwners[i]].blsPublicKey) == keccak256(blsPublicKey)) {
-                revert AlreadyInUse();
-            }
+        bytes32 mapKey = bytes32(blsPublicKey[0:32]);
+        if (blsPublicKeyToOwner[mapKey] != address(0)) {
+            revert AlreadyInUse();
         }
 
         Validator storage validator = validators[owner];
         bytes memory oldBLSPublicKey = validator.blsPublicKey;
 
         validator.updateBLSPublicKey(blsPublicKey);
+        blsPublicKeyToOwner[mapKey] = owner;
 
         emit BLSPublicKeyUpdated(owner, oldBLSPublicKey, blsPublicKey);
     }
