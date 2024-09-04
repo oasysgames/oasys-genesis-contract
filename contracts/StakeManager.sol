@@ -212,6 +212,13 @@ contract StakeManager is IStakeManager, System {
     function updateBLSPublicKey(bytes calldata blsPublicKey) external validatorExists(msg.sender) {
         address owner = msg.sender;
 
+        // BLS public key should be unique, as it is identifier of a vote.
+        for (uint256 i = 0; i < validatorOwners.length; i++) {
+            if (keccak256(validators[validatorOwners[i]].blsPublicKey) == keccak256(blsPublicKey)) {
+                revert AlreadyInUse();
+            }
+        }
+
         Validator storage validator = validators[owner];
         bytes memory oldBLSPublicKey = validator.blsPublicKey;
 
