@@ -28,6 +28,8 @@ const config: HardhatUserConfig = {
     hardhat: {
       initialBaseFeePerGas: 0,
       gasPrice: 0,
+      // Don't worry about the contract size limit.
+      // Instead of deploying these contracts, we embed the bytecode directly into storage.
       allowUnlimitedContractSize: true,
     },
   },
