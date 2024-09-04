@@ -443,6 +443,12 @@ describe('StakeManager', () => {
       tx = validator.updateBLSPublicKey(newBLSPubKey, attacker)
       await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
 
+      // fail: already registered BLS public key
+      const validator2 = new Validator(stakeManager, accounts[1], accounts[2])
+      await validator2.joinValidator()
+      tx = validator2.updateBLSPublicKey(blsPubKey)
+      await expect(tx).to.revertedWith('AlreadyInUse()')
+
       // update
       await expect(await validator.updateBLSPublicKey(newBLSPubKey))
         .to.emit(stakeManager, 'BLSPublicKeyUpdated')
