@@ -9,7 +9,7 @@
     "coverage": "hardhat coverage",
     "lint": "solhint 'contracts/**/*.sol' && prettier -c 'contracts/**/*.sol'",
     "task:output-candidate-manager": "hardhat output-candidate-manager > outputs/output-candidate-manager.json",
-    "task:update-bls": "hardhat update-bls"
+    "task:update-bls": "hardhat update-bls --network localhost"
   },
   "keywords": [],
   "author": "",

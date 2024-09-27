@@ -21,13 +21,15 @@ task('update-bls', 'Call updateBLSPublicKey function of StakeManager')
     const validatorOwner = signers[0].address;
     const blsKey: string = assertBLSKey(taskArgs.key);
     const stakeManager = await ethers.getContractAt('StakeManager', StakeManagerAddress)
+    const balance = await ethers.provider.getBalance(validatorOwner)
 
-    console.log(`Updating BLS key to ${blsKey}`)
     console.log(`Validator Owner address: ${validatorOwner}`)
+    console.log(`Balance of owner key: ${balance}`)
+    console.log(`Updating BLS key to ${blsKey}....`)
 
     // Send the transaction
     const tx = await stakeManager.updateBLSPublicKey(blsKey)
-    await tx.wait();
+    await tx.wait(2);
 
     // Confirm the updated key
     const info = await stakeManager.getValidatorInfo(validatorOwner, 0)
