@@ -1,4 +1,5 @@
 import { HardhatUserConfig } from 'hardhat/types'
+import { ethers } from 'ethers'
 import '@nomicfoundation/hardhat-toolbox'
 import '@nomiclabs/hardhat-waffle'
 import 'solidity-coverage'
@@ -38,7 +39,8 @@ const config: HardhatUserConfig = {
     },
     localhost: {
       url: "http://127.0.0.1:8545",
-      accounts: [DEPLOYER_KEY]
+      accounts: [DEPLOYER_KEY],
+      gasPrice: 1000000000 // 1 gwei
     },
   },
   mocha: {

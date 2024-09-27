@@ -25,7 +25,8 @@ task('update-bls', 'Call updateBLSPublicKey function of StakeManager')
 
     console.log(`Validator Owner address: ${validatorOwner}`)
     console.log(`Balance of owner key: ${balance}`)
-    console.log(`Updating BLS key to ${blsKey}....`)
+    console.log(`Updating BLS key to ${blsKey}`)
+    console.log(`...`)
 
     // Send the transaction
     const tx = await stakeManager.updateBLSPublicKey(blsKey)
