@@ -1,6 +1,7 @@
 import { task } from 'hardhat/config'
 
 const StakeManagerAddress =  '0x0000000000000000000000000000000000001001'
+const BLS_KEY: string = process.env.BLS_KEY || '0x'
 
 export const assertBLSKey = (data: string): string => {
   if (!data.startsWith('0x')) {
@@ -13,7 +14,7 @@ export const assertBLSKey = (data: string): string => {
 };
 
 task('update-bls', 'Call updateBLSPublicKey function of StakeManager')
-  .addParam('key', 'The BLS public key to update')
+  .addParam('key', 'The BLS public key to update', BLS_KEY, undefined)
   .setAction(async (taskArgs, hre) => {
     const { ethers } = hre;
     const signers = await ethers.getSigners();
