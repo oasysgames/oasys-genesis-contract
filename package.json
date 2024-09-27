@@ -8,7 +8,8 @@
     "test": "hardhat test",
     "coverage": "hardhat coverage",
     "lint": "solhint 'contracts/**/*.sol' && prettier -c 'contracts/**/*.sol'",
-    "task:output-candidate-manager": "hardhat output-candidate-manager > outputs/output-candidate-manager.json"
+    "task:output-candidate-manager": "hardhat output-candidate-manager > outputs/output-candidate-manager.json",
+    "task:update-bls": "hardhat update-bls --key 0xFF.."
   },
   "keywords": [],
   "author": "",
