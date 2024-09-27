@@ -30,7 +30,10 @@ task('update-bls', 'Call updateBLSPublicKey function of StakeManager')
 
     // Send the transaction
     const tx = await stakeManager.updateBLSPublicKey(blsKey)
-    await tx.wait(2);
+    const receipt = await tx.wait(2); // Confirm 2 blocks
+
+    // print the transaction receipt
+    console.log(receipt)
 
     // Confirm the updated key
     const info = await stakeManager.getValidatorInfo(validatorOwner, 0)
