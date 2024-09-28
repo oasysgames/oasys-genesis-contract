@@ -1,9 +1,14 @@
 import { HardhatUserConfig } from 'hardhat/types'
+import { ethers } from 'ethers'
 import '@nomicfoundation/hardhat-toolbox'
 import '@nomiclabs/hardhat-waffle'
 import 'solidity-coverage'
 
 import './tasks/output-candidate-manager'
+import './tasks/update-bls'
+
+const DEPLOYER_KEY: string = process.env.DEPLOYER_KEY ||
+ "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"; // Dumy key
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -31,6 +36,11 @@ const config: HardhatUserConfig = {
       // Don't worry about the contract size limit.
       // Instead of deploying these contracts, we embed the bytecode directly into storage.
       allowUnlimitedContractSize: true,
+    },
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      accounts: [DEPLOYER_KEY],
+      gasPrice: 1500000000 // 1.5 gwei
     },
   },
   mocha: {
