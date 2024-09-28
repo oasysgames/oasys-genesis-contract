@@ -40,7 +40,7 @@ const config: HardhatUserConfig = {
     localhost: {
       url: "http://127.0.0.1:8545",
       accounts: [DEPLOYER_KEY],
-      gasPrice: 1000000000 // 1 gwei
+      gasPrice: 1500000000 // 1.5 gwei
     },
   },
   mocha: {
