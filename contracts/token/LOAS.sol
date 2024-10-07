@@ -15,6 +15,9 @@ error InvalidClaimPeriod();
 // OAS is zero.
 error NoAmount();
 
+// Something not found.
+error NotFound();
+
 // Invalid minter address.
 error InvalidMinter();
 
@@ -168,11 +171,12 @@ contract LOAS is ERC20 {
      * Revoke the LOAS from the holder.
      * As the default behavior, only the locked amount can be revoked.
      * otherwise, the amount can be specified.
-     * @param original Address of the original claimer.
      * @param holder Address of the holder.
      * @param amount_ Amount of the LOAS.
      */
-    function revoke(address original, address holder, uint256 amount_) external {
+    function revoke(address holder, uint256 amount_) external {
+        address original = originalClaimer[holder];
+        if (original == address(0)) revert NotFound();
         // Only the minter can revoke the LOAS.
         ClaimInfo storage originalClaimInfo = claimInfo[original];
         if (originalClaimInfo.from != msg.sender) revert InvalidRevoker();

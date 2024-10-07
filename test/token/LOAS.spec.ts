@@ -18,12 +18,14 @@ describe('LOAS', () => {
   let genesis: Account
   let originalClaimer: Account
   let allowedClaimer: Account
+  let invalidClaimer: Account
 
   before(async () => {
     const accounts = await ethers.getSigners()
     genesis = accounts[1]
     originalClaimer = accounts[2]
     allowedClaimer = accounts[3]
+    invalidClaimer = accounts[4]
   })
 
   beforeEach(async () => {
@@ -67,12 +69,16 @@ describe('LOAS', () => {
       await expectBalance(originalClaimer, 16, 84)
       await expectTotalSupply(84)
 
+      // Fail by non-existing holder
+      let tx = loas.connect(originalClaimer).revoke(invalidClaimer.address, toWei('84'))
+      await expect(tx).to.revertedWith('NotFound()')
+
       // Fail by invalid revoker.
-      const tx = loas.connect(originalClaimer).revoke(originalClaimer.address, originalClaimer.address, toWei('84'))
+      tx = loas.connect(originalClaimer).revoke(originalClaimer.address, toWei('84'))
       await expect(tx).to.revertedWith('InvalidRevoker()')
 
       // Revoke all.
-      await expect(await loas.connect(genesis).revoke(originalClaimer.address, originalClaimer.address, toWei('84')))
+      await expect(await loas.connect(genesis).revoke(originalClaimer.address, toWei('84')))
         .to.emit(loas, 'Revoke')
         .withArgs(originalClaimer.address, originalClaimer.address, toWei('84'))
       await expectBalance(genesis, -16, 0)
@@ -96,7 +102,7 @@ describe('LOAS', () => {
       await setBlockTimestamp('2100/07/31')
 
       // Revoke locked only.
-      await loas.connect(genesis).revoke(originalClaimer.address, originalClaimer.address, 0)
+      await loas.connect(genesis).revoke(originalClaimer.address, 0)
       let actualOAS = fromWei((await genesis.getBalance()).toString())
       expect(Math.ceil(Number(actualOAS))).to.equal(10000-100+84)
       let supply = fromWei((await loas.totalSupply()).toString())
@@ -139,17 +145,17 @@ describe('LOAS', () => {
       await expectTotalSupply(100)
 
       // try to revoke original claimer, but it should fail as the locked LOAS is over than original claimer's balance.
-      const tx = loas.connect(genesis).revoke(originalClaimer.address, originalClaimer.address, 0)
+      const tx = loas.connect(genesis).revoke(originalClaimer.address, 0)
       await expect(tx).to.revertedWith('OverAmount()')
 
       // revoke all the original claimer's balance.
-      await loas.connect(genesis).revoke(originalClaimer.address, originalClaimer.address, toWei('50'))
+      await loas.connect(genesis).revoke(originalClaimer.address, toWei('50'))
       await expectBalance(originalClaimer, 0, 0)
       await expectBalance(genesis, -50, 0)
       await expectTotalSupply(50)
 
       // revoke only locked LOAS from allowed claimer.
-      await loas.connect(genesis).revoke(originalClaimer.address, allowedClaimer.address, 0)
+      await loas.connect(genesis).revoke(allowedClaimer.address, 0)
       let actualOAS = fromWei((await genesis.getBalance()).toString())
       expect(Math.ceil(Number(actualOAS))).to.equal(10000-100+50+17)
       let supply = fromWei((await loas.totalSupply()).toString())
