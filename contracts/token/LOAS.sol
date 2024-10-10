@@ -15,8 +15,14 @@ error InvalidClaimPeriod();
 // OAS is zero.
 error NoAmount();
 
+// Something not found.
+error NotFound();
+
 // Invalid minter address.
 error InvalidMinter();
+
+// Invalid revoker address.
+error InvalidRevoker();
 
 // Over claimable OAS.
 error OverAmount();
@@ -46,6 +52,7 @@ contract LOAS is ERC20 {
         uint64 since;
         uint64 until;
         address from;
+        uint256 revoked;
     }
 
     /**********************
@@ -62,6 +69,7 @@ contract LOAS is ERC20 {
     event Mint(address indexed to, uint256 amount, uint256 since, uint256 until);
     event Claim(address indexed holder, uint256 amount);
     event Renounce(address indexed holder, uint256 amount);
+    event Revoke(address indexed original, address indexed holder, uint256 amount);
     event Allow(address indexed original, address indexed transferable);
 
     /***************
@@ -91,7 +99,7 @@ contract LOAS is ERC20 {
         if (msg.value == 0) revert NoAmount();
 
         _mint(to, msg.value);
-        claimInfo[to] = ClaimInfo(msg.value, 0, since, until, msg.sender);
+        claimInfo[to] = ClaimInfo(msg.value, 0, since, until, msg.sender, 0);
         originalClaimer[to] = to;
 
         emit Mint(to, msg.value, since, until);
@@ -149,13 +157,50 @@ contract LOAS is ERC20 {
         if (amount == 0) revert NoAmount();
 
         ClaimInfo storage originalClaimInfo = claimInfo[originalClaimer[msg.sender]];
-        if (amount > originalClaimInfo.amount - originalClaimInfo.claimed) revert OverAmount();
+        uint256 remainingAmount = originalClaimInfo.amount - originalClaimInfo.claimed - originalClaimInfo.revoked;
+        if (amount > remainingAmount) revert OverAmount();
 
         _burn(msg.sender, amount);
         (bool success, ) = originalClaimInfo.from.call{ value: amount }("");
         if (!success) revert TransferFailed();
 
         emit Renounce(originalClaimer[msg.sender], amount);
+    }
+
+    /**
+     * Revoke the LOAS from the holder.
+     * As the default behavior, only the locked amount can be revoked.
+     * otherwise, the amount can be specified.
+     * @param holder Address of the holder.
+     * @param amount_ Amount of the LOAS.
+     */
+    function revoke(address holder, uint256 amount_) external {
+        address original = originalClaimer[holder];
+        if (original == address(0)) revert NotFound();
+        // Only the minter can revoke the LOAS.
+        ClaimInfo storage originalClaimInfo = claimInfo[original];
+        if (originalClaimInfo.from != msg.sender) revert InvalidRevoker();
+
+        // Determine the amount to revoke.
+        uint256 amount = amount_;
+        if (amount == 0) {
+            // As a default, revoke only the locked amount.
+            uint256 remainingAmount = originalClaimInfo.amount - originalClaimInfo.claimed - originalClaimInfo.revoked;
+            uint256 currentClaimableOAS = getClaimableOAS(original) - originalClaimInfo.claimed;
+            if (remainingAmount <= currentClaimableOAS) revert NoAmount(); // Sanity check
+            amount = remainingAmount - currentClaimableOAS;
+        }
+
+        // Check over amount.
+        if (balanceOf(holder) < amount) revert OverAmount();
+
+        // Revoke the LOAS.
+        originalClaimInfo.revoked += amount;
+        _burn(holder, amount);
+        (bool success, ) = msg.sender.call{ value: amount }("");
+        if (!success) revert TransferFailed();
+
+        emit Revoke(original, holder, amount);
     }
 
     /**
@@ -223,7 +268,7 @@ contract LOAS is ERC20 {
     function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 amount
+        uint256 /*amount*/
     ) internal view override {
         if (from == address(0) || to == address(0)) return;
         if (originalClaimer[from] == originalClaimer[to]) return;

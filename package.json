@@ -1,6 +1,6 @@
 {
   "name": "oasys-genesis-contract",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "description": "The genesis contracts of Oasys Blockchain",
   "main": "index.js",
   "scripts": {
