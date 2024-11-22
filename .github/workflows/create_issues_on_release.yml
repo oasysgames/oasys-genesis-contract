@@ -1,0 +1,19 @@
+name: Create Issues on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Create Issue From File
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: Release Check Sheet for ${{ github.ref_name }}
+          content-filepath: .github/workflows/templates/create_issues_on_release.md
+          assignees: tak1827,ironbeer
