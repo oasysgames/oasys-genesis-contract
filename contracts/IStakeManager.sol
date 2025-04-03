@@ -107,6 +107,15 @@ interface IStakeManager {
      */
     function slash(address operator, uint256 blocks) external;
 
+    /**
+     * Slash validator by number of times. Only whitelist can call this function.
+     * @param owner_ Validator owner address. can be zero address.
+     * @param operator Validator address. can be zero address.
+     * @param blsPublicKey BLS public key used for fast finality. can be empty.
+     * @param count Number of slashes.
+     */
+    function slashByCount(address owner_, address operator, bytes calldata blsPublicKey, uint256 count) external;
+
     /*********************************************
      * Functions for Validator owner or operator *
      *********************************************/

@@ -76,6 +76,9 @@ contract StakeManager is IStakeManager, System {
     // Mapping of BLS public key to owner
     // The first 32 bytes of the BLS public key is used as the key.
     mapping(bytes32 => address) public blsPublicKeyToOwner;
+    // List of addresses that can call slashRaw
+    // No external function to add callers; caller addresses are embedded on the oasys-validator side.
+    mapping(address => bool) public slashRawCallers;
 
     /*************
      * Modifiers *
@@ -109,6 +112,17 @@ contract StakeManager is IStakeManager, System {
     modifier onlyValidatorOwnerOrOperator(address validator) {
         Validator storage _validator = validators[validator];
         if (msg.sender != _validator.owner && msg.sender != _validator.operator) {
+            revert UnauthorizedSender();
+        }
+        _;
+    }
+
+    /**
+     * Modifier requiring the sender to be whitelisted.
+     * @param caller Caller address.
+     */
+    modifier onlySlashRawCaller(address caller) {
+        if (!slashRawCallers[caller]) {
             revert UnauthorizedSender();
         }
         _;
@@ -164,6 +178,42 @@ contract StakeManager is IStakeManager, System {
         Validator storage validator = validators[operatorToOwner[operator]];
         uint256 until = validator.slash(environment.value(), environment.epoch(), blocks);
         emit ValidatorSlashed(validator.owner);
+        if (until > 0) {
+            emit ValidatorJailed(validator.owner, until);
+        }
+    }
+
+    /**
+     * @inheritdoc IStakeManager
+     */
+    function slashByCount(
+        address owner_,
+        address operator,
+        bytes calldata blsPublicKey,
+        uint256 count
+    ) external onlySlashRawCaller(msg.sender) {
+        // Verify the validator exists
+        address owner = owner_;
+        if (owner == address(0)) {
+            if (operator != address(0)) {
+                owner = operatorToOwner[operator];
+            } else if (blsPublicKey.length == 48) {
+                owner = blsPublicKeyToOwner[bytes32(blsPublicKey[0:32])];
+            }
+        }
+        if (owner == address(0) || validators[owner].owner == address(0)) {
+            revert ValidatorDoesNotExist();
+        }
+
+        Validator storage validator = validators[owner];
+        uint256 epoch = environment.epoch();
+
+        // Slash the validator
+        validator.slashRaw(epoch, count);
+        emit ValidatorSlashed(validator.owner);
+
+        // Jail if the slashes exceed the threshold
+        uint256 until = validator.tryJail(environment.value(), epoch);
         if (until > 0) {
             emit ValidatorJailed(validator.owner, until);
         }
