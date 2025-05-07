@@ -188,9 +188,10 @@ library Validator {
         }
 
         uint256 slashes = validator.slashes[epoch];
-        if (slashes > 0) {
+        uint256 bonus = validator.bonus[epoch];
+        if (slashes > 0 || bonus > 0) {
             uint256 blocks = validator.blocks[epoch];
-            rewards = Math.share(rewards, blocks - slashes, blocks, Constants.REWARD_PRECISION);
+            rewards = Math.share(rewards, blocks - slashes, blocks + bonus, Constants.REWARD_PRECISION);
         }
         return (rewards, totalStake);
     }

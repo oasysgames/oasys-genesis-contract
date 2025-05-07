@@ -59,6 +59,8 @@ interface IStakeManager {
         // ----- added from v1.6.0 -----
         // BLS public key used for fast finality
         bytes blsPublicKey;
+        // ----- added from v1.8.0 -----
+        mapping(uint256 => uint256) bonus;
     }
 
     struct Staker {

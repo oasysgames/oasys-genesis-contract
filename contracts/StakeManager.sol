@@ -181,6 +181,10 @@ contract StakeManager is IStakeManager, System {
         if (until > 0) {
             emit ValidatorJailed(validator.owner, until);
         }
+
+        // Add bonus to reporter
+        Validator storage reporter = validators[operatorToOwner[block.coinbase]];
+        validator.addBonus()
     }
 
     /**
