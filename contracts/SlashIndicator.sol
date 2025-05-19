@@ -16,8 +16,11 @@ import { NullAddress, UnauthorizedSender, PastEpoch } from "./lib/Errors.sol";
 contract SlashIndicator is ISlashIndicator {
     using RLPEncode for *;
 
-    /// @dev Divider used to determine penalty severity for finality violations
-    uint256 public constant FINALITY_VIOLATION_DIVIDER = 4;
+    /// @dev Penalty epoch period for double signing.
+    uint256 public constant DOUBLE_SIGN_PENALTY_PERIOD = 3;
+
+    /// @dev Penalty epoch period for finality violations.
+    uint256 public constant FINALITY_VIOLATION_PENALTY_PERIOD = 1;
 
     /// @notice Environment contract providing chain parameters
     IEnvironment public immutable environment;
@@ -69,7 +72,7 @@ contract SlashIndicator is ISlashIndicator {
 
         // Jail the validator
         // Revert if the signer is not a validator
-        stakeManager.slashByCount(address(0), signer, new bytes(0), environment.value().jailThreshold);
+        stakeManager.jail(address(0), signer, new bytes(0), DOUBLE_SIGN_PENALTY_PERIOD);
     }
 
     /// @inheritdoc ISlashIndicator
@@ -104,10 +107,9 @@ contract SlashIndicator is ISlashIndicator {
             "verify signature failed"
         );
 
-        // Slash validator by count. not jailed by just one evidence
+        // Jail the validator
         // Revert if the signer is not a validator
-        uint256 count = environment.value().jailThreshold / FINALITY_VIOLATION_DIVIDER;
-        stakeManager.slashByCount(address(0), address(0), _evidence.voteAddr, count);
+        stakeManager.jail(address(0), address(0), _evidence.voteAddr, FINALITY_VIOLATION_PENALTY_PERIOD);
     }
 
     function _verifyBLSSignature(VoteData memory vote, bytes memory voteAddr) internal view returns (bool) {

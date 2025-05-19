@@ -4,7 +4,7 @@ import { toWei } from 'web3-utils'
 import { expect } from 'chai'
 
 import type { Environment, StakeManager, SlashIndicator } from '../typechain-types/contracts'
-import type { PrecompileBLSVerify, PrecompileDoubleSign   } from '../typechain-types/contracts/test'
+import type { PrecompileBLSVerify, PrecompileDoubleSign } from '../typechain-types/contracts/test'
 import type { ISlashIndicator } from '../typechain-types/contracts/SlashIndicator'
 
 import {
@@ -31,8 +31,9 @@ const initialEnv: EnvironmentValue = {
 
 const gasPrice = 0
 const chainId = 248
-const blsPubKey = "0x9393c6ce7b837418a3409f464026569b5aeace7cfc05ccd9535a36d9de4613131b955dfc5c4d61f030922d3c17b211af"
-const emptyBLSPubKey = '0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+const blsPubKey = '0x9393c6ce7b837418a3409f464026569b5aeace7cfc05ccd9535a36d9de4613131b955dfc5c4d61f030922d3c17b211af'
+const emptyBLSPubKey =
+  '0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
 
 describe('SlashIndicator', () => {
   let accounts: Account[]
@@ -85,9 +86,7 @@ describe('SlashIndicator', () => {
   // deploy the SlashIndicator contract
   beforeEach(async () => {
     const factory = await ethers.getContractFactory('SlashIndicator')
-    slashIndicator = await factory
-      .connect(deployer)
-      .deploy(environment.address, stakeManager.address, chainId)
+    slashIndicator = await factory.connect(deployer).deploy(environment.address, stakeManager.address, chainId)
   })
 
   // set the addresses of dependent contracts in the StakeManager
@@ -95,7 +94,7 @@ describe('SlashIndicator', () => {
     const pad = (s: string, len = 32) => ethers.utils.hexZeroPad(s, len)
     const storages = [
       ['0x0', pad(environment.address, 31) + '01'], // combined value of the `bool public initialized`
-      [ethers.utils.keccak256(pad(slashIndicator.address) + pad('0x' + Number(11).toString(16)).slice(2)) ,pad('0x1')]
+      [ethers.utils.keccak256(pad(slashIndicator.address) + pad('0x' + Number(11).toString(16)).slice(2)), pad('0x1')],
     ]
 
     await Promise.all(
@@ -112,16 +111,17 @@ describe('SlashIndicator', () => {
   })
 
   describe('submitDoubleSignEvidence', () => {
-    const mockHeader1 = "0x1234"
-    const mockHeader2 = "0xffff"
+    const mockHeader1 = '0x1234'
+    const mockHeader2 = '0xffff'
 
     it('success', async () => {
       await precompileDoubleSign.set(await operator.getAddress(), 123, false)
 
-      await slashIndicator.submitDoubleSignEvidence(mockHeader1, mockHeader2)
+      const tx = await slashIndicator.submitDoubleSignEvidence(mockHeader1, mockHeader2)
       const epoch = (await environment.epoch()).toNumber()
-      await validator.expectJailed(epoch + 1, true)
-      await validator.expectSlashes(epoch, 0, initialEnv.jailThreshold)
+      await expect(tx)
+        .to.emit(stakeManager, 'ValidatorJailed')
+        .withArgs(validator.owner.address, epoch + 3)
     })
 
     it('fail: invalid evidence', async () => {
@@ -177,10 +177,11 @@ describe('SlashIndicator', () => {
     it('success', async () => {
       await precompileBLSVerify.set(true, false)
 
-      await slashIndicator.submitFinalityViolationEvidence(evidence)
+      const tx = await slashIndicator.submitFinalityViolationEvidence(evidence)
       const epoch = (await environment.epoch()).toNumber()
-      const divider = (await slashIndicator.FINALITY_VIOLATION_DIVIDER()).toNumber()
-      await validator.expectSlashes(epoch, 0, Math.floor(initialEnv.jailThreshold / divider))
+      await expect(tx)
+        .to.emit(stakeManager, 'ValidatorJailed')
+        .withArgs(validator.owner.address, epoch + 1)
     })
 
     it('fail: target block too old', async () => {

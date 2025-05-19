@@ -120,24 +120,23 @@ library Validator {
         if (validator.blocks[epoch] == 0) {
             validator.blocks[epoch] = blocks;
         }
-        slashRaw(validator, epoch, 1);
-        until = tryJail(validator, env, epoch);
-    }
 
-    function slashRaw(IStakeManager.Validator storage validator, uint256 epoch, uint256 slashes) internal {
-        validator.slashes[epoch] += slashes;
+        uint256 slashes = validator.slashes[epoch] + 1;
+        validator.slashes[epoch] = slashes;
+        if (slashes >= env.jailThreshold) {
+            until = tryJail(validator, epoch, env.jailPeriod);
+        }
     }
 
     function tryJail(
         IStakeManager.Validator storage validator,
-        IEnvironment.EnvironmentValue memory env,
-        uint256 epoch
+        uint256 epoch,
+        uint256 period
     ) internal returns (uint256 until) {
-        uint256 slashes = validator.slashes[epoch];
-        if (slashes >= env.jailThreshold && !validator.jails[epoch + 1]) {
-            until = epoch + env.jailPeriod;
+        if (period > 0 && !validator.jails[epoch + 1]) {
+            until = epoch + period;
             while (epoch < until) {
-                epoch++;
+                ++epoch;
                 validator.jails[epoch] = true;
             }
         }
