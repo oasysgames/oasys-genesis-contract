@@ -5,6 +5,7 @@ import '@nomiclabs/hardhat-waffle'
 import 'solidity-coverage'
 
 import './tasks/output-candidate-manager'
+import './tasks/output-slash-indicator'
 import './tasks/update-bls'
 
 const DEPLOYER_KEY: string = process.env.DEPLOYER_KEY ||
