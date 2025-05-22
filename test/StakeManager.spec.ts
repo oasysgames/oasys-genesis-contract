@@ -69,12 +69,17 @@ describe('StakeManager', () => {
     expValidators: Validator[],
     expCandidates: boolean[],
     expStakes?: string[],
-    expBLSPublicKeys?: string[]
+    expBLSPublicKeys?: string[],
   ) => {
     await expectValidators(await getEpoch(0), expValidators, expCandidates, expStakes, expBLSPublicKeys)
   }
 
-  const expectNextValidators = async (expValidators: Validator[], expCandidates: boolean[], expStakes?: string[], expBLSPublicKeys?: string[]) => {
+  const expectNextValidators = async (
+    expValidators: Validator[],
+    expCandidates: boolean[],
+    expStakes?: string[],
+    expBLSPublicKeys?: string[],
+  ) => {
     await expectValidators(await getEpoch(1), expValidators, expCandidates, expStakes, expBLSPublicKeys)
   }
 
@@ -214,14 +219,15 @@ describe('StakeManager', () => {
     const blocks = ~~(env.epochPeriod.toNumber() / operators.filter((_: any, i: number) => candidates[i]).length)
 
     const restoreCoinbase = await setCoinbase(validator.operator.address)
-    await Promise.all([...Array(count).keys()].map((_) => validator.slash(target, blocks)))
+    const txs = await Promise.all([...Array(count).keys()].map((_) => validator.slash(target, blocks)))
     await restoreCoinbase()
+    return txs
   }
 
   before(async () => {
     accounts = await ethers.getSigners()
     deployer = accounts[0]
-    slasher = accounts[accounts.length/2]
+    slasher = accounts[accounts.length / 2]
   })
 
   // setup the test network
@@ -275,7 +281,10 @@ describe('StakeManager', () => {
       ['0x0', pad(environment.address, 31) + '01'], // combined value of the `bool public initialized`
       ['0x1', pad(allowlist.address)],
       ['0x9', pad(candidateManager.address)],
-      [ethers.utils.keccak256(pad(await slasher.getAddress()) + pad('0x' + Number(11).toString(16)).slice(2)) ,pad('0x1')]
+      [
+        ethers.utils.keccak256(pad(await slasher.getAddress()) + pad('0x' + Number(11).toString(16)).slice(2)),
+        pad('0x1'),
+      ],
     ]
 
     await Promise.all(
@@ -346,8 +355,10 @@ describe('StakeManager', () => {
     let owner: Account
     let operator: Account
     let attacker: Account
-    const blsPubKey = "0x9393c6ce7b837418a3409f464026569b5aeace7cfc05ccd9535a36d9de4613131b955dfc5c4d61f030922d3c17b211af"
-    const emptyBLSPubKey = '0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+    const blsPubKey =
+      '0x9393c6ce7b837418a3409f464026569b5aeace7cfc05ccd9535a36d9de4613131b955dfc5c4d61f030922d3c17b211af'
+    const emptyBLSPubKey =
+      '0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
 
     before(() => {
       owner = accounts[accounts.length - 1]
@@ -419,7 +430,8 @@ describe('StakeManager', () => {
 
     it('updateBLSPublicKey()', async () => {
       const ethPrivKey = '0xd1c71e71b06e248c8dbe94d49ef6d6b0d64f5d71b1e33a0f39e14dadb070304a'
-      const newBLSPubKey = "0x16e08cfa832b113a1c9042b3579fc9000973417fb2295568396ffe74e6445457278382ab121d513f4a0ecf22144d2c93"
+      const newBLSPubKey =
+        '0x16e08cfa832b113a1c9042b3579fc9000973417fb2295568396ffe74e6445457278382ab121d513f4a0ecf22144d2c93'
       await validator.joinValidator()
 
       // invalid length
@@ -433,7 +445,7 @@ describe('StakeManager', () => {
       // register at first time
       await expect(await validator.updateBLSPublicKey(blsPubKey))
         .to.emit(stakeManager, 'BLSPublicKeyUpdated')
-        .withArgs(validator.owner.address, "0x", blsPubKey)
+        .withArgs(validator.owner.address, '0x', blsPubKey)
       expect((await validator.getInfo()).blsPublicKey).to.equal(blsPubKey)
 
       // fail: from operator
@@ -633,30 +645,64 @@ describe('StakeManager', () => {
       await validator.expectTotalStake('0.0045662', '1000', '0')
     })
 
-    it('slashByCount()', async () => {
-      const owner = validator.owner.address;
-      const operator = validator.operator.address;
-      const slashes = initialEnv.jailThreshold
-      const until = initialEnv.jailPeriod + (await environment.epoch()).toNumber()
-      await validator.joinValidator()
-      await validator.updateBLSPublicKey(blsPubKey)
+    describe('jail()', () => {
+      const period = 3
 
-      // Case: slash by owner
-      let tx = stakeManager.connect(slasher).slashByCount(owner, zeroAddress, emptyBLSPubKey, slashes)
-      await expect(tx).to.emit(stakeManager, 'ValidatorJailed').withArgs(owner, until)
-      // Case: slash by operator
-      tx = stakeManager.connect(slasher).slashByCount(zeroAddress, operator, emptyBLSPubKey, slashes)
-      await expect(tx).to.emit(stakeManager, 'ValidatorSlashed').withArgs(owner)
-      // Case: slash by blsPubKey
-      await stakeManager.connect(slasher).slashByCount(zeroAddress, zeroAddress, blsPubKey, slashes)
+      let owner: string
+      let operator: string
+      let epoch: number
+      let until: number
+      beforeEach(async () => {
+        owner = validator.owner.address
+        operator = validator.operator.address
+        epoch = await getEpoch()
+        until = period + epoch
 
-      // Case: fail by unauthorized sender
-      tx = stakeManager.slashByCount(zeroAddress, zeroAddress, blsPubKey, slashes)
-      await expect(tx).to.revertedWith('UnauthorizedSender()')
+        await validator.joinValidator()
+        await validator.updateBLSPublicKey(blsPubKey)
+      })
 
-      // Case: fail by none existing validator
-      tx = stakeManager.connect(slasher).slashByCount(zeroAddress, zeroAddress, emptyBLSPubKey, slashes)
-      await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
+      it('slash by owner', async () => {
+        const tx = stakeManager.connect(slasher).jail(owner, zeroAddress, emptyBLSPubKey, period)
+        await expect(tx).to.emit(stakeManager, 'ValidatorJailed').withArgs(owner, until)
+        await validator.expectJailed(epoch + 0, false)
+        await validator.expectJailed(epoch + 1, true)
+        await validator.expectJailed(epoch + 2, true)
+        await validator.expectJailed(epoch + 3, true)
+        await validator.expectJailed(epoch + 4, false)
+      })
+
+      it('slash by operator', async () => {
+        const tx = stakeManager.connect(slasher).jail(zeroAddress, operator, emptyBLSPubKey, period)
+        await expect(tx).to.emit(stakeManager, 'ValidatorJailed').withArgs(owner, until)
+      })
+
+      it('slash by blsPublicKey', async () => {
+        const tx = await stakeManager.connect(slasher).jail(zeroAddress, zeroAddress, blsPubKey, period)
+        await expect(tx).to.emit(stakeManager, 'ValidatorJailed').withArgs(owner, until)
+      })
+
+      it('extend jail period', async () => {
+        let tx = await stakeManager.connect(slasher).jail(zeroAddress, zeroAddress, blsPubKey, period)
+        await expect(tx).to.emit(stakeManager, 'ValidatorJailed').withArgs(owner, until)
+        await validator.expectJailed(epoch + 4, false)
+
+        tx = await stakeManager.connect(slasher).jail(zeroAddress, zeroAddress, blsPubKey, period + 1)
+        await expect(tx)
+          .to.emit(stakeManager, 'ValidatorJailed')
+          .withArgs(owner, until + 1)
+        await validator.expectJailed(epoch + 4, true)
+      })
+
+      it('fail by unauthorized sender', async () => {
+        const tx = stakeManager.jail(zeroAddress, zeroAddress, blsPubKey, period)
+        await expect(tx).to.revertedWith('UnauthorizedSender()')
+      })
+
+      it('fail by none existing validator', async () => {
+        const tx = stakeManager.connect(slasher).jail(zeroAddress, zeroAddress, emptyBLSPubKey, period)
+        await expect(tx).to.revertedWith('ValidatorDoesNotExist()')
+      })
     })
   })
 
@@ -1682,7 +1728,15 @@ describe('StakeManager', () => {
       await expectCurrentValidators(validators, [true, true, true, false, true])
       await expectNextValidators(validators, [true, true, true, false, true])
 
-      await slash(validator1, validator2, 50)
+      const txs = await slash(validator1, validator2, 50)
+      const epoch = await getEpoch()
+      await expect(txs[txs.length - 1])
+        .to.emit(stakeManager, 'ValidatorJailed')
+        .withArgs(validator2.owner.address, epoch + 2)
+      await validator2.expectJailed(epoch + 0, false)
+      await validator2.expectJailed(epoch + 1, true)
+      await validator2.expectJailed(epoch + 2, true)
+      await validator2.expectJailed(epoch + 3, false)
 
       await expectCurrentValidators(validators, [true, true, true, false, true])
       await expectNextValidators(validators, [true, false, true, false, true])

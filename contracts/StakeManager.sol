@@ -76,9 +76,9 @@ contract StakeManager is IStakeManager, System {
     // Mapping of BLS public key to owner
     // The first 32 bytes of the BLS public key is used as the key.
     mapping(bytes32 => address) public blsPublicKeyToOwner;
-    // List of addresses that can call slashRaw
+    // List of addresses that can call jail
     // No external function to add callers; caller addresses are embedded on the oasys-validator side.
-    mapping(address => bool) public slashRawCallers;
+    mapping(address => bool) public jailCallers;
 
     /*************
      * Modifiers *
@@ -121,8 +121,8 @@ contract StakeManager is IStakeManager, System {
      * Modifier requiring the sender to be whitelisted.
      * @param caller Caller address.
      */
-    modifier onlySlashRawCaller(address caller) {
-        if (!slashRawCallers[caller]) {
+    modifier onlyJailCaller(address caller) {
+        if (!jailCallers[caller]) {
             revert UnauthorizedSender();
         }
         _;
@@ -186,12 +186,12 @@ contract StakeManager is IStakeManager, System {
     /**
      * @inheritdoc IStakeManager
      */
-    function slashByCount(
+    function jail(
         address owner_,
         address operator,
         bytes calldata blsPublicKey,
-        uint256 count
-    ) external onlySlashRawCaller(msg.sender) {
+        uint256 period
+    ) external onlyJailCaller(msg.sender) {
         // Verify the validator exists
         address owner = owner_;
         if (owner == address(0)) {
@@ -206,14 +206,7 @@ contract StakeManager is IStakeManager, System {
         }
 
         Validator storage validator = validators[owner];
-        uint256 epoch = environment.epoch();
-
-        // Slash the validator
-        validator.slashRaw(epoch, count);
-        emit ValidatorSlashed(validator.owner);
-
-        // Jail if the slashes exceed the threshold
-        uint256 until = validator.tryJail(environment.value(), epoch);
+        uint256 until = validator.tryJail(environment.epoch(), period);
         if (until > 0) {
             emit ValidatorJailed(validator.owner, until);
         }
