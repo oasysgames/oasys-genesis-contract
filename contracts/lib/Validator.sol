@@ -133,7 +133,7 @@ library Validator {
         uint256 epoch,
         uint256 period
     ) internal returns (uint256 until) {
-        if (period > 0 && !validator.jails[epoch + 1]) {
+        if (period > 0) {
             until = epoch + period;
             while (epoch < until) {
                 ++epoch;

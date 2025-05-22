@@ -682,6 +682,18 @@ describe('StakeManager', () => {
         await expect(tx).to.emit(stakeManager, 'ValidatorJailed').withArgs(owner, until)
       })
 
+      it('extend jail period', async () => {
+        let tx = await stakeManager.connect(slasher).jail(zeroAddress, zeroAddress, blsPubKey, period)
+        await expect(tx).to.emit(stakeManager, 'ValidatorJailed').withArgs(owner, until)
+        await validator.expectJailed(epoch + 4, false)
+
+        tx = await stakeManager.connect(slasher).jail(zeroAddress, zeroAddress, blsPubKey, period + 1)
+        await expect(tx)
+          .to.emit(stakeManager, 'ValidatorJailed')
+          .withArgs(owner, until + 1)
+        await validator.expectJailed(epoch + 4, true)
+      })
+
       it('fail by unauthorized sender', async () => {
         const tx = stakeManager.jail(zeroAddress, zeroAddress, blsPubKey, period)
         await expect(tx).to.revertedWith('UnauthorizedSender()')
