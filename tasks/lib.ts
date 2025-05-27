@@ -1,13 +1,14 @@
 import * as crypto from 'crypto'
 import type { HardhatRuntimeEnvironment as HRE } from 'hardhat/types'
 
-export type Networks = 'mainnet' | 'testnet'
+export type Networks = 'mainnet' | 'testnet' | 'localnet'
 
 export type Storage = { [slot: string]: string }
 
 export const Chains: { [network in Networks]: { chainID: number } } = {
   mainnet: { chainID: 248 },
   testnet: { chainID: 9372 },
+  localnet: { chainID: 12345 },
 } as const
 
 export const PredeployContracts = {
