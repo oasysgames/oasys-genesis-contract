@@ -109,6 +109,7 @@ interface IStakeManager {
 
     /**
      * Jail the validator. Only whitelist can call this function.
+     * Should input either owner, operator or blsPublicKey.
      * @param owner Validator owner address. can be zero address.
      * @param operator Validator address. can be zero address.
      * @param blsPublicKey BLS public key used for fast finality. can be empty.

@@ -144,7 +144,7 @@ describe('SlashIndicator', () => {
       await mining(currentBlockNumber + initialEnv.epochPeriod)
 
       const tx = slashIndicator.submitDoubleSignEvidence(mockHeader1, mockHeader2)
-      await expect(tx).to.revertedWith('evidence too old')
+      await expect(tx).to.be.revertedWithCustomError(slashIndicator, "EvidenceTooOld")
     })
   })
 
@@ -189,7 +189,7 @@ describe('SlashIndicator', () => {
       await mining(currentBlockNumber + initialEnv.epochPeriod)
 
       const tx = slashIndicator.submitFinalityViolationEvidence(evidence)
-      await expect(tx).to.revertedWith('target block too old')
+      await expect(tx).to.be.revertedWithCustomError(slashIndicator, 'TargetBlockTooOld')
     })
 
     it('fail: two identical votes', async () => {
@@ -197,7 +197,7 @@ describe('SlashIndicator', () => {
       evidence.voteB.tarHash = evidence.voteA.tarHash
 
       const tx = slashIndicator.submitFinalityViolationEvidence(evidence)
-      await expect(tx).to.revertedWith('two identical votes')
+      await expect(tx).to.revertedWith('TwoIdenticalVotes()')
     })
 
     it('fail: invalid evidence', async () => {
@@ -211,7 +211,7 @@ describe('SlashIndicator', () => {
       await precompileBLSVerify.set(false, false)
 
       const tx = slashIndicator.submitFinalityViolationEvidence(evidence)
-      await expect(tx).to.revertedWith('verify signature failed')
+      await expect(tx).to.revertedWith('VerifySignatureFailed()')
     })
 
     it('fail: validator not exist', async () => {

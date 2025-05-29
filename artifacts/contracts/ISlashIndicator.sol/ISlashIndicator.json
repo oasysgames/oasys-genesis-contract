@@ -4,6 +4,215 @@
   "sourceName": "contracts/ISlashIndicator.sol",
   "abi": [
     {
+      "inputs": [],
+      "name": "EmptyHeader",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "evidenceHeight",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "currentBlock",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "slashScope",
+          "type": "uint256"
+        }
+      ],
+      "name": "EvidenceTooOld",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NoViolationOfVoteRules",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "srcNumA",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "tarNumA",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "srcNumB",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "tarNumB",
+          "type": "uint256"
+        }
+      ],
+      "name": "SrcNumBiggerThanTarNum",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "targetBlockA",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "targetBlockB",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "currentBlock",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "slashScope",
+          "type": "uint256"
+        }
+      ],
+      "name": "TargetBlockTooOld",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "TwoIdenticalVotes",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "VerifySignatureFailed",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "signer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "header1",
+          "type": "bytes"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "header2",
+          "type": "bytes"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "evidenceHeight",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "blockNumber",
+          "type": "uint256"
+        }
+      ],
+      "name": "DoubleSignEvidenceSubmitted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "voteAddr",
+          "type": "bytes"
+        },
+        {
+          "components": [
+            {
+              "internalType": "uint256",
+              "name": "srcNum",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "srcHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "tarNum",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "tarHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes",
+              "name": "sig",
+              "type": "bytes"
+            }
+          ],
+          "indexed": false,
+          "internalType": "struct ISlashIndicator.VoteData",
+          "name": "voteA",
+          "type": "tuple"
+        },
+        {
+          "components": [
+            {
+              "internalType": "uint256",
+              "name": "srcNum",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "srcHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "tarNum",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "tarHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes",
+              "name": "sig",
+              "type": "bytes"
+            }
+          ],
+          "indexed": false,
+          "internalType": "struct ISlashIndicator.VoteData",
+          "name": "voteB",
+          "type": "tuple"
+        }
+      ],
+      "name": "FinalityViolationEvidenceSubmitted",
+      "type": "event"
+    },
+    {
       "inputs": [
         {
           "internalType": "bytes",
