@@ -197,7 +197,7 @@ describe('SlashIndicator', () => {
       evidence.voteB.tarHash = evidence.voteA.tarHash
 
       const tx = slashIndicator.submitFinalityViolationEvidence(evidence)
-      await expect(tx).to.revertedWith('TwoIdenticalVotes()')
+      await expect(tx).to.be.revertedWithCustomError(slashIndicator, 'TwoIdenticalVotes')
     })
 
     it('fail: invalid evidence', async () => {
