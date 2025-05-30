@@ -1,6 +1,6 @@
 {
   "name": "oasys-genesis-contract",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "The genesis contracts of Oasys Blockchain",
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,7 @@
     "coverage": "hardhat coverage",
     "lint": "solhint 'contracts/**/*.sol' && prettier -c 'contracts/**/*.sol'",
     "task:output-candidate-manager": "hardhat output-candidate-manager > outputs/output-candidate-manager.json",
+    "task:output-slash-indicator": "hardhat output-slash-indicator > outputs/output-slash-indicator.json",
     "task:update-bls": "hardhat update-bls --network localhost"
   },
   "keywords": [],

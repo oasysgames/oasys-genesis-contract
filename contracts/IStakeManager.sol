@@ -107,6 +107,16 @@ interface IStakeManager {
      */
     function slash(address operator, uint256 blocks) external;
 
+    /**
+     * Jail the validator. Only whitelist can call this function.
+     * Should input either owner, operator or blsPublicKey.
+     * @param owner Validator owner address. can be zero address.
+     * @param operator Validator address. can be zero address.
+     * @param blsPublicKey BLS public key used for fast finality. can be empty.
+     * @param period Jail period in epochs. The starting epoch will be the next epoch.
+     */
+    function jail(address owner, address operator, bytes calldata blsPublicKey, uint256 period) external;
+
     /*********************************************
      * Functions for Validator owner or operator *
      *********************************************/

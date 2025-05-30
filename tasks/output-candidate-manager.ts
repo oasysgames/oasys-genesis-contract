@@ -1,11 +1,14 @@
-import * as crypto from 'crypto'
-
-import type { HardhatRuntimeEnvironment as HRE } from 'hardhat/types'
 import { task } from 'hardhat/config'
 
-type Networks = 'mainnet' | 'testnet'
-
-type Storage = { [slot: string]: string }
+import {
+  Networks,
+  Storage,
+  PredeployContracts,
+  assertImmutableVariable,
+  codeAndHash,
+  getStorageChanges,
+  mergeStorage,
+} from './lib'
 
 type Output = {
   AddressList: {
@@ -18,13 +21,6 @@ type Output = {
     hash: string
   }
 }
-
-const PredeployContracts = {
-  Environment: '0x0000000000000000000000000000000000001000',
-  StakeManager: '0x0000000000000000000000000000000000001001',
-  CandidateValidatorManagerHighStakes: '0x520000000000000000000000000000000000002D',
-  CandidateValidatorManager: '0x520000000000000000000000000000000000002e',
-} as const
 
 const initialHighStakeValidators: { [network in Networks]: string[] } = {
   mainnet: [
@@ -55,37 +51,6 @@ const initialHighStakeValidators: { [network in Networks]: string[] } = {
   ],
   testnet: ['0xF886672205399c186638abfA9Dc155dEe9CBBD2e'],
 }
-
-const assertImmutableVariable = async (method: () => Promise<string>, expect: string) => {
-  const actual = await method()
-  if (actual !== expect) {
-    throw new Error(`Variable mismatch, expect: ${expect}, actual: ${actual}`)
-  }
-}
-
-const codeAndHash = async (hre: HRE, address: string): Promise<{ code: string; hash: string }> => {
-  const code = await hre.ethers.provider.send('eth_getCode', [address, 'latest'])
-  const hash = crypto
-    .createHash('md5')
-    .update(Buffer.from(code.slice(2), 'hex'))
-    .digest('hex')
-  return { code, hash }
-}
-
-const getStorageChanges = async (hre: HRE, txhash: string): Promise<Storage> => {
-  const trace = (await hre.ethers.provider.send('debug_traceTransaction', [
-    txhash,
-    { disableMemory: true, disableStack: true },
-  ])) as { structLogs: { storage: Storage }[] }
-
-  const prefixed = {} as Storage
-  Object.entries(trace.structLogs[trace.structLogs.length - 1].storage).forEach(
-    ([slot, val]) => (prefixed['0x' + slot] = '0x' + val),
-  )
-  return prefixed
-}
-
-const mergeStorage = (src: Storage, appends: Storage): Storage => ({ ...src, ...appends })
 
 task('output-candidate-manager').setAction(async (_, hre) => {
   // Deploy the AddressList.

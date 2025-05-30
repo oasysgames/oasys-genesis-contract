@@ -123,10 +123,20 @@ library Validator {
 
         uint256 slashes = validator.slashes[epoch] + 1;
         validator.slashes[epoch] = slashes;
-        if (slashes >= env.jailThreshold && !validator.jails[epoch + 1]) {
-            until = epoch + env.jailPeriod;
+        if (slashes >= env.jailThreshold) {
+            until = tryJail(validator, epoch, env.jailPeriod);
+        }
+    }
+
+    function tryJail(
+        IStakeManager.Validator storage validator,
+        uint256 epoch,
+        uint256 period
+    ) internal returns (uint256 until) {
+        if (period > 0) {
+            until = epoch + period;
             while (epoch < until) {
-                epoch++;
+                ++epoch;
                 validator.jails[epoch] = true;
             }
         }
