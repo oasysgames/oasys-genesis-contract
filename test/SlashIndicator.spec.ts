@@ -211,7 +211,7 @@ describe('SlashIndicator', () => {
       await precompileBLSVerify.set(false, false)
 
       const tx = slashIndicator.submitFinalityViolationEvidence(evidence)
-      await expect(tx).to.revertedWith('VerifySignatureFailed()')
+      await expect(tx).to.be.revertedWithCustomError(slashIndicator, 'VerifySignatureFailed')
     })
 
     it('fail: validator not exist', async () => {
