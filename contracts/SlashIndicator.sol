@@ -44,8 +44,8 @@ contract SlashIndicator is ISlashIndicator {
     }
 
     /// @inheritdoc ISlashIndicator
-    function submitDoubleSignEvidence(bytes memory header1, bytes memory header2) public override {
-        require(header1.length != 0 && header2.length != 0, "empty header");
+    function submitDoubleSignEvidence(bytes calldata header1, bytes calldata header2) external override {
+        if (header1.length == 0 || header2.length == 0) revert EmptyHeader();
 
         bytes[] memory elements = new bytes[](3);
         elements[0] = chainId.encodeUint();
@@ -68,51 +68,78 @@ contract SlashIndicator is ISlashIndicator {
             signer := mload(add(output, 0x14))
             evidenceHeight := mload(add(output, 0x34))
         }
-        require(evidenceHeight + _slashScope() >= block.number, "evidence too old");
+        if (evidenceHeight + _slashScope() < block.number) {
+            revert EvidenceTooOld({
+                evidenceHeight: evidenceHeight,
+                currentBlock: block.number,
+                slashScope: _slashScope()
+            });
+        }
 
         // Jail the validator
         // Revert if the signer is not a validator
         stakeManager.jail(address(0), signer, new bytes(0), DOUBLE_SIGN_PENALTY_PERIOD);
+
+        // Emit event
+        emit DoubleSignEvidenceSubmitted(
+            signer,
+            header1,
+            header2,
+            evidenceHeight,
+            block.number
+        );
     }
 
     /// @inheritdoc ISlashIndicator
-    function submitFinalityViolationEvidence(FinalityEvidence memory _evidence) public override {
-        // Basic check
-        require(
-            _evidence.voteA.tarNum + _slashScope() > block.number
-                && _evidence.voteB.tarNum + _slashScope() > block.number,
-            "target block too old"
-        );
-        require(
-            !(_evidence.voteA.srcHash == _evidence.voteB.srcHash && _evidence.voteA.tarHash == _evidence.voteB.tarHash),
-            "two identical votes"
-        );
-        require(
-            _evidence.voteA.srcNum < _evidence.voteA.tarNum && _evidence.voteB.srcNum < _evidence.voteB.tarNum,
-            "srcNum bigger than tarNum"
-        );
+    function submitFinalityViolationEvidence(FinalityEvidence calldata _evidence) external override {
+        // Basic checks
+        if (_evidence.voteA.tarNum + _slashScope() <= block.number || _evidence.voteB.tarNum + _slashScope() <= block.number) {
+            revert TargetBlockTooOld({
+                targetBlockA: _evidence.voteA.tarNum,
+                targetBlockB: _evidence.voteB.tarNum,
+                currentBlock: block.number,
+                slashScope: _slashScope()
+            });
+        }
+        if (_evidence.voteA.srcHash == _evidence.voteB.srcHash && _evidence.voteA.tarHash == _evidence.voteB.tarHash) {
+            revert TwoIdenticalVotes();
+        }
+        if (_evidence.voteA.tarNum <= _evidence.voteA.srcNum || _evidence.voteB.tarNum <= _evidence.voteB.srcNum) {
+            revert SrcNumBiggerThanTarNum({
+                srcNumA: _evidence.voteA.srcNum,
+                tarNumA: _evidence.voteA.tarNum,
+                srcNumB: _evidence.voteB.srcNum,
+                tarNumB: _evidence.voteB.tarNum
+            });
+        }
 
         // Vote rules check
-        require(
-            (_evidence.voteA.srcNum < _evidence.voteB.srcNum && _evidence.voteB.tarNum < _evidence.voteA.tarNum)
-                || (_evidence.voteB.srcNum < _evidence.voteA.srcNum && _evidence.voteA.tarNum < _evidence.voteB.tarNum)
-                || _evidence.voteA.tarNum == _evidence.voteB.tarNum,
-            "no violation of vote rules"
-        );
+        if (!(
+            (_evidence.voteA.srcNum < _evidence.voteB.srcNum && _evidence.voteB.tarNum < _evidence.voteA.tarNum) ||
+            (_evidence.voteB.srcNum < _evidence.voteA.srcNum && _evidence.voteA.tarNum < _evidence.voteB.tarNum) ||
+            (_evidence.voteA.tarNum == _evidence.voteB.tarNum)
+        )) {
+            revert NoViolationOfVoteRules();
+        }
 
         // BLS verification
-        require(
-            _verifyBLSSignature(_evidence.voteA, _evidence.voteAddr)
-                && _verifyBLSSignature(_evidence.voteB, _evidence.voteAddr),
-            "verify signature failed"
-        );
+        if (!_verifyBLSSignature(_evidence.voteA, _evidence.voteAddr) || !_verifyBLSSignature(_evidence.voteB, _evidence.voteAddr)) {
+            revert VerifySignatureFailed();
+        }
 
         // Jail the validator
         // Revert if the signer is not a validator
         stakeManager.jail(address(0), address(0), _evidence.voteAddr, FINALITY_VIOLATION_PENALTY_PERIOD);
+
+        // Emit event
+        emit FinalityViolationEvidenceSubmitted(
+            _evidence.voteAddr,
+            _evidence.voteA,
+            _evidence.voteB
+        );
     }
 
-    function _verifyBLSSignature(VoteData memory vote, bytes memory voteAddr) internal view returns (bool) {
+    function _verifyBLSSignature(VoteData calldata vote, bytes calldata voteAddr) internal view returns (bool) {
         bytes[] memory elements = new bytes[](4);
         bytes memory _bytes = new bytes(32);
         elements[0] = vote.srcNum.encodeUint();

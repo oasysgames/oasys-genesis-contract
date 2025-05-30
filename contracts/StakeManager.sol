@@ -78,6 +78,7 @@ contract StakeManager is IStakeManager, System {
     mapping(bytes32 => address) public blsPublicKeyToOwner;
     // List of addresses that can call jail
     // No external function to add callers; caller addresses are embedded on the oasys-validator side.
+    // `SlashIndicator` address is added to this mapping
     mapping(address => bool) public jailCallers;
 
     /*************
