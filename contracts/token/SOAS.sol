@@ -30,6 +30,9 @@ error CannotRenounce();
 // Only staking contracts or burn are allowed.
 error UnauthorizedTransfer();
 
+// Claim information cannot be updated.
+error NotUpdatable();
+
 /**
  * @title SOAS
  * @dev The SOAS is non-transferable but stakable token.
@@ -64,6 +67,7 @@ contract SOAS is ERC20 {
     event Claim(address indexed holder, uint256 amount);
     event Renounce(address indexed holder, uint256 amount);
     event Allow(address indexed original, address indexed transferable);
+    event UpdateClaimInfo(address indexed original, uint256 since, uint256 until);
 
     /***************
      * Constructor *
@@ -125,6 +129,30 @@ contract SOAS is ERC20 {
         for (uint256 i; i < alloweds.length; i++) {
             _allow(original, alloweds[i]);
         }
+    }
+
+    /**
+     * Update claim period for the claimer address.
+     * @param original Address of the claimer.
+     * @param since    New starting timestamp.
+     * @param until    New ending timestamp.
+     */
+    function updateClaimInfo(
+        address original,
+        uint64 since,
+        uint64 until
+    ) external {
+        ClaimInfo storage info = claimInfo[original];
+        if (info.from != msg.sender) revert InvalidMinter();
+        if (block.timestamp >= info.until) revert NotUpdatable();
+        uint256 claimable = getClaimableOAS(original) - info.claimed;
+        if (claimable > 0) revert NotUpdatable();
+        if (since <= block.timestamp || since >= until) revert InvalidClaimPeriod();
+
+        info.since = since;
+        info.until = until;
+
+        emit UpdateClaimInfo(original, since, until);
     }
 
     /**
