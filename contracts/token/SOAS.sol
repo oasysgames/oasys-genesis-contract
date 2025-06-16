@@ -30,7 +30,7 @@ error CannotRenounce();
 // Only staking contracts or burn are allowed.
 error UnauthorizedTransfer();
 
-// Claim information cannot be updated.
+// Vesting period cannot be updated.
 error NotUpdatable();
 
 /**
@@ -49,6 +49,7 @@ contract SOAS is ERC20 {
         uint64 since;
         uint64 until;
         address from;
+        bool denyUpdate;
     }
 
     /**********************
@@ -67,7 +68,7 @@ contract SOAS is ERC20 {
     event Claim(address indexed holder, uint256 amount);
     event Renounce(address indexed holder, uint256 amount);
     event Allow(address indexed original, address indexed transferable);
-    event UpdateClaimInfo(address indexed original, uint256 since, uint256 until);
+    event UpdateVestingPeriod(address indexed original, uint256 since, uint256 until);
 
     /***************
      * Constructor *
@@ -101,14 +102,14 @@ contract SOAS is ERC20 {
         if (msg.value == 0) revert NoAmount();
 
         _mint(to, msg.value);
-        claimInfo[to] = ClaimInfo(msg.value, 0, since, until, msg.sender);
+        claimInfo[to] = ClaimInfo(msg.value, 0, since, until, msg.sender, false);
         originalClaimer[to] = to;
 
         emit Mint(to, msg.value, since, until);
     }
 
     /**
-     * Allow the transferable address for the claimer address. 
+     * Allow the transferable address for the claimer address.
      * @param original Address of the claimer.
      * @param allowed Transferable address.
      */
@@ -132,27 +133,29 @@ contract SOAS is ERC20 {
     }
 
     /**
-     * Update claim period for the claimer address.
+     * Update vesting period for the claimer address.
+     * - Only the minter can update the vesting period.
+     * - Fail if the update is denied.
+     * - Fail if the vesting period is already started.
      * @param original Address of the claimer.
      * @param since    New starting timestamp.
      * @param until    New ending timestamp.
      */
-    function updateClaimInfo(
+    function updateVestingPeriod(
         address original,
         uint64 since,
         uint64 until
     ) external {
+        if (since <= block.timestamp || since >= until) revert InvalidClaimPeriod();
         ClaimInfo storage info = claimInfo[original];
         if (info.from != msg.sender) revert InvalidMinter();
-        if (block.timestamp >= info.until) revert NotUpdatable();
-        uint256 claimable = getClaimableOAS(original) - info.claimed;
-        if (claimable > 0) revert NotUpdatable();
-        if (since <= block.timestamp || since >= until) revert InvalidClaimPeriod();
+        if (info.denyUpdate) revert NotUpdatable();
+        if (info.since < block.timestamp) revert NotUpdatable();
 
         info.since = since;
         info.until = until;
 
-        emit UpdateClaimInfo(original, since, until);
+        emit UpdateVestingPeriod(original, since, until);
     }
 
     /**
