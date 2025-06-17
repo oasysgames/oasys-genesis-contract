@@ -202,6 +202,22 @@ describe('SOAS', () => {
           .updateVestingPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
       ).to.revertedWith('NotUpdatable()')
     })
+
+    it('revert if update denied', async () => {
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100'),
+        })
+
+      await soas.connect(originalClaimer).toggleDenyUpdate()
+      await expect(
+        soas
+          .connect(genesis)
+          .updateVestingPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
+      ).to.revertedWith('NotUpdatable()')
+    })
   })
 
   describe('toggleDenyUpdate()', async () => {

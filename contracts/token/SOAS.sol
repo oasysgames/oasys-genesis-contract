@@ -165,7 +165,7 @@ contract SOAS is ERC20 {
     /**
      * Toggle the denyUpdate flag.
      * - Only the original claimer can toggle.
-     * - Fail if the vesting period is ended.
+     * - Fail if the vesting period is already started.
      */
     function toggleDenyUpdate() external {
         if (originalClaimer[msg.sender] != msg.sender) revert InvalidClaimer();
