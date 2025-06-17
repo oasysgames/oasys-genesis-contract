@@ -154,7 +154,7 @@ contract SOAS is ERC20 {
         ClaimInfo storage info = claimInfo[original];
         if (info.from != msg.sender) revert InvalidMinter();
         if (info.denyUpdate) revert NotUpdatable();
-        if (info.since < block.timestamp) revert NotUpdatable();
+        if (info.since <= block.timestamp) revert NotUpdatable();
 
         info.since = since;
         info.until = until;
@@ -170,7 +170,7 @@ contract SOAS is ERC20 {
     function toggleDenyUpdate() external {
         if (originalClaimer[msg.sender] != msg.sender) revert InvalidClaimer();
         ClaimInfo storage info = claimInfo[msg.sender];
-        if (block.timestamp >= info.until) revert NotUpdatable();
+        if (info.since <= block.timestamp) revert NotUpdatable();
 
         info.denyUpdate = !info.denyUpdate;
 
@@ -221,6 +221,7 @@ contract SOAS is ERC20 {
      * @param amounts List of amount.
      */
     function transfer(address[] memory tos, uint256[] memory amounts) public returns (bool) {
+        // solhint-disable-next-line reason-string
         require(tos.length == amounts.length, "SOAS: bulk transfer args must be equals");
         address owner = _msgSender();
         for (uint256 i; i < tos.length; i++) {
@@ -240,6 +241,7 @@ contract SOAS is ERC20 {
         address[] memory tos,
         uint256[] memory amounts
     ) public returns (bool) {
+        // solhint-disable-next-line reason-string
         require(
             froms.length == tos.length && tos.length == amounts.length,
             "SOAS: bulk transferFrom args must be equals"
@@ -280,7 +282,7 @@ contract SOAS is ERC20 {
     function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 amount
+        uint256 /*amount*/
     ) internal view override {
         if (from == address(0) || to == address(0)) return;
         if (_contains(allowedAddresses, from) || _contains(allowedAddresses, to)) return;
