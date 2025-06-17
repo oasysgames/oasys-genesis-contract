@@ -18,6 +18,9 @@ error NoAmount();
 // Invalid minter address.
 error InvalidMinter();
 
+// Invalid claimer address.
+error InvalidClaimer();
+
 // Over claimable OAS.
 error OverAmount();
 
@@ -69,6 +72,7 @@ contract SOAS is ERC20 {
     event Renounce(address indexed holder, uint256 amount);
     event Allow(address indexed original, address indexed transferable);
     event UpdateVestingPeriod(address indexed original, uint256 since, uint256 until);
+    event ToggleDenyUpdate(address indexed original, bool denied);
 
     /***************
      * Constructor *
@@ -156,6 +160,21 @@ contract SOAS is ERC20 {
         info.until = until;
 
         emit UpdateVestingPeriod(original, since, until);
+    }
+
+    /**
+     * Toggle the denyUpdate flag.
+     * - Only the original claimer can toggle.
+     * - Fail if the vesting period is ended.
+     */
+    function toggleDenyUpdate() external {
+        if (originalClaimer[msg.sender] != msg.sender) revert InvalidClaimer();
+        ClaimInfo storage info = claimInfo[msg.sender];
+        if (block.timestamp >= info.until) revert NotUpdatable();
+
+        info.denyUpdate = !info.denyUpdate;
+
+        emit ToggleDenyUpdate(msg.sender, info.denyUpdate);
     }
 
     /**
