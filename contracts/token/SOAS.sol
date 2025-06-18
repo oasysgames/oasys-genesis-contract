@@ -71,7 +71,7 @@ contract SOAS is ERC20 {
     event Claim(address indexed holder, uint256 amount);
     event Renounce(address indexed holder, uint256 amount);
     event Allow(address indexed original, address indexed transferable);
-    event UpdateVestingPeriod(address indexed original, uint256 since, uint256 until);
+    event UpdateClaimPeriod(address indexed original, uint256 since, uint256 until);
     event ToggleDenyUpdate(address indexed original, bool denied);
 
     /***************
@@ -137,7 +137,7 @@ contract SOAS is ERC20 {
     }
 
     /**
-     * Update vesting period for the claimer address.
+     * Update claim period
      * - Only the minter can update the vesting period.
      * - Fail if the update is denied.
      * - Fail if the vesting period is already started.
@@ -145,7 +145,7 @@ contract SOAS is ERC20 {
      * @param since    New starting timestamp.
      * @param until    New ending timestamp.
      */
-    function updateVestingPeriod(
+    function updateClaimPeriod(
         address original,
         uint64 since,
         uint64 until
@@ -159,7 +159,7 @@ contract SOAS is ERC20 {
         info.since = since;
         info.until = until;
 
-        emit UpdateVestingPeriod(original, since, until);
+        emit UpdateClaimPeriod(original, since, until);
     }
 
     /**

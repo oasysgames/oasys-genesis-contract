@@ -154,7 +154,7 @@ describe('SOAS', () => {
     })
   })
 
-  describe('updateVestingPeriod()', async () => {
+  describe('updateClaimPeriod()', async () => {
     it('update before vesting start', async () => {
       await setBlockTimestamp('2100/01/01')
       await soas
@@ -165,7 +165,7 @@ describe('SOAS', () => {
 
       await soas
         .connect(genesis)
-        .updateVestingPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31'))
+        .updateClaimPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31'))
 
       const info = await soas.claimInfo(originalClaimer.address)
       expect(info.since).to.equal(getTimestamp('2100/08/01'))
@@ -183,7 +183,7 @@ describe('SOAS', () => {
       await expect(
         soas
           .connect(allowedClaimer)
-          .updateVestingPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
+          .updateClaimPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
       ).to.revertedWith('InvalidMinter()')
     })
 
@@ -199,7 +199,7 @@ describe('SOAS', () => {
       await expect(
         soas
           .connect(genesis)
-          .updateVestingPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
+          .updateClaimPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
       ).to.revertedWith('NotUpdatable()')
     })
 
@@ -215,7 +215,7 @@ describe('SOAS', () => {
       await expect(
         soas
           .connect(genesis)
-          .updateVestingPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
+          .updateClaimPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
       ).to.revertedWith('NotUpdatable()')
     })
   })
