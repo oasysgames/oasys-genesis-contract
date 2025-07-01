@@ -18,6 +18,9 @@ error NoAmount();
 // Invalid minter address.
 error InvalidMinter();
 
+// Invalid claimer address.
+error InvalidClaimer();
+
 // Over claimable OAS.
 error OverAmount();
 
@@ -29,6 +32,9 @@ error CannotRenounce();
 
 // Only staking contracts or burn are allowed.
 error UnauthorizedTransfer();
+
+// Vesting period cannot be updated.
+error NotUpdatable();
 
 /**
  * @title SOAS
@@ -46,6 +52,7 @@ contract SOAS is ERC20 {
         uint64 since;
         uint64 until;
         address from;
+        bool denyUpdate;
     }
 
     /**********************
@@ -64,6 +71,8 @@ contract SOAS is ERC20 {
     event Claim(address indexed holder, uint256 amount);
     event Renounce(address indexed holder, uint256 amount);
     event Allow(address indexed original, address indexed transferable);
+    event UpdateClaimPeriod(address indexed original, uint256 since, uint256 until);
+    event ToggleDenyUpdate(address indexed original, bool denied);
 
     /***************
      * Constructor *
@@ -97,14 +106,14 @@ contract SOAS is ERC20 {
         if (msg.value == 0) revert NoAmount();
 
         _mint(to, msg.value);
-        claimInfo[to] = ClaimInfo(msg.value, 0, since, until, msg.sender);
+        claimInfo[to] = ClaimInfo(msg.value, 0, since, until, msg.sender, false);
         originalClaimer[to] = to;
 
         emit Mint(to, msg.value, since, until);
     }
 
     /**
-     * Allow the transferable address for the claimer address. 
+     * Allow the transferable address for the claimer address.
      * @param original Address of the claimer.
      * @param allowed Transferable address.
      */
@@ -125,6 +134,47 @@ contract SOAS is ERC20 {
         for (uint256 i; i < alloweds.length; i++) {
             _allow(original, alloweds[i]);
         }
+    }
+
+    /**
+     * Update claim period
+     * - Only the minter can update the vesting period.
+     * - Fail if the update is denied.
+     * - Fail if the vesting period is already started.
+     * @param original Address of the claimer.
+     * @param since    New starting timestamp.
+     * @param until    New ending timestamp.
+     */
+    function updateClaimPeriod(
+        address original,
+        uint64 since,
+        uint64 until
+    ) external {
+        if (since <= block.timestamp || since >= until) revert InvalidClaimPeriod();
+        ClaimInfo storage info = claimInfo[original];
+        if (info.from != msg.sender) revert InvalidMinter();
+        if (info.denyUpdate) revert NotUpdatable();
+        if (info.since <= block.timestamp) revert NotUpdatable();
+
+        info.since = since;
+        info.until = until;
+
+        emit UpdateClaimPeriod(original, since, until);
+    }
+
+    /**
+     * Toggle the denyUpdate flag.
+     * - Only the original claimer can toggle.
+     * - Fail if the vesting period is already started.
+     */
+    function toggleDenyUpdate() external {
+        if (originalClaimer[msg.sender] != msg.sender) revert InvalidClaimer();
+        ClaimInfo storage info = claimInfo[msg.sender];
+        if (info.since <= block.timestamp) revert NotUpdatable();
+
+        info.denyUpdate = !info.denyUpdate;
+
+        emit ToggleDenyUpdate(msg.sender, info.denyUpdate);
     }
 
     /**
@@ -171,6 +221,7 @@ contract SOAS is ERC20 {
      * @param amounts List of amount.
      */
     function transfer(address[] memory tos, uint256[] memory amounts) public returns (bool) {
+        // solhint-disable-next-line reason-string
         require(tos.length == amounts.length, "SOAS: bulk transfer args must be equals");
         address owner = _msgSender();
         for (uint256 i; i < tos.length; i++) {
@@ -190,6 +241,7 @@ contract SOAS is ERC20 {
         address[] memory tos,
         uint256[] memory amounts
     ) public returns (bool) {
+        // solhint-disable-next-line reason-string
         require(
             froms.length == tos.length && tos.length == amounts.length,
             "SOAS: bulk transferFrom args must be equals"
@@ -230,7 +282,7 @@ contract SOAS is ERC20 {
     function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 amount
+        uint256 /*amount*/
     ) internal view override {
         if (from == address(0) || to == address(0)) return;
         if (_contains(allowedAddresses, from) || _contains(allowedAddresses, to)) return;

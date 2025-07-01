@@ -153,4 +153,111 @@ describe('SOAS', () => {
       await expectTotalSupply(85 - 18)
     })
   })
+
+  describe('updateClaimPeriod()', async () => {
+    it('update before vesting start', async () => {
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100'),
+        })
+
+      await soas
+        .connect(genesis)
+        .updateClaimPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31'))
+
+      const info = await soas.claimInfo(originalClaimer.address)
+      expect(info.since).to.equal(getTimestamp('2100/08/01'))
+      expect(info.until).to.equal(getTimestamp('2100/12/31'))
+    })
+
+    it('revert by non minter', async () => {
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100'),
+        })
+
+      await expect(
+        soas
+          .connect(allowedClaimer)
+          .updateClaimPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
+      ).to.revertedWith('InvalidMinter()')
+    })
+
+    it('revert after vesting period started', async () => {
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100'),
+        })
+
+      await setBlockTimestamp('2100/07/01')
+      await expect(
+        soas
+          .connect(genesis)
+          .updateClaimPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
+      ).to.revertedWith('NotUpdatable()')
+    })
+
+    it('revert if update denied', async () => {
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100'),
+        })
+
+      await soas.connect(originalClaimer).toggleDenyUpdate()
+      await expect(
+        soas
+          .connect(genesis)
+          .updateClaimPeriod(originalClaimer.address, getTimestamp('2100/08/01'), getTimestamp('2100/12/31')),
+      ).to.revertedWith('NotUpdatable()')
+    })
+  })
+
+  describe('toggleDenyUpdate()', async () => {
+    it('toggle by original claimer', async () => {
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100'),
+        })
+
+      await soas.connect(originalClaimer).toggleDenyUpdate()
+      expect((await soas.claimInfo(originalClaimer.address)).denyUpdate).to.equal(true)
+
+      await soas.connect(originalClaimer).toggleDenyUpdate()
+      expect((await soas.claimInfo(originalClaimer.address)).denyUpdate).to.equal(false)
+    })
+
+    it('revert by allowed claimer', async () => {
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100'),
+        })
+
+      await soas.connect(genesis)['allow(address,address)'](originalClaimer.address, allowedClaimer.address)
+      await expect(soas.connect(allowedClaimer).toggleDenyUpdate()).to.revertedWith('InvalidClaimer()')
+    })
+
+    it('revert after vesting period started', async () => {
+      await setBlockTimestamp('2100/01/01')
+      await soas
+        .connect(genesis)
+        .mint(originalClaimer.address, getTimestamp('2100/07/01'), getTimestamp('2100/12/31'), {
+          value: toWei('100'),
+        })
+
+      await setBlockTimestamp('2100/07/01')
+      await expect(soas.connect(originalClaimer).toggleDenyUpdate()).to.revertedWith('NotUpdatable()')
+    })
+  })
 })

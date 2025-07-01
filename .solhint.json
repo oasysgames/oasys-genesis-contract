@@ -6,6 +6,7 @@
     "modifier-name-mixedcase": "error",
     "private-vars-leading-underscore": "error",
     "func-visibility": ["warn", { "ignoreConstructors": true }],
+    "not-rely-on-time": "off",
     "avoid-low-level-calls": "off"
   }
 }
