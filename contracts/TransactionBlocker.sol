@@ -7,7 +7,7 @@ import { NullAddress, UnauthorizedSender } from "./lib/Errors.sol";
 
 /**
  * @title TransactionBlocker
- * @notice A contract manages blocked addresses and global blocking state.
+ * @notice A contract that manages blocked addresses and global blocking state.
  */
 contract TransactionBlocker is AccessControl {
 
