@@ -26,9 +26,10 @@ contract TransactionBlocker is AccessControl {
     /// @notice Global flag indicating whether all transactions are blocked
     bool public isBlockedAll;
 
-    /// @notice Mapping to track which addresses are blocked
-    /// @notice Both from/to direction are blocked
-    mapping(address => bool) public isBlockedAddress;
+    /// @notice Mapping to track which addresses are blocked (both from/to directions)
+    /// @notice The value is the index + 1 of the address in the blockedAddresses array
+    /// @notice If the address is not blocked, the value is 0
+    mapping(address => uint256) private _isBlockedAddress;
 
     /// @notice Array of all currently blocked addresses
     address[] public blockedAddresses;
@@ -60,11 +61,11 @@ contract TransactionBlocker is AccessControl {
     constructor(address[] memory admins, address[] memory operators) {
         for (uint256 i = 0; i < admins.length; ++i) {
             if (admins[i] == address(0)) revert NullAddress();
-            _setupRole(DEFAULT_ADMIN_ROLE, admins[i]);
+            _grantRole(DEFAULT_ADMIN_ROLE, admins[i]);
         }
         for (uint256 i = 0; i < operators.length; ++i) {
             if (operators[i] == address(0)) revert NullAddress();
-            _setupRole(OPERATOR_ROLE, operators[i]);
+            _grantRole(OPERATOR_ROLE, operators[i]);
         }
     }
 
@@ -121,6 +122,15 @@ contract TransactionBlocker is AccessControl {
     }
 
     /**
+     * @notice Checks if an address is blocked
+     * @param addr The address to check
+     * @return True if the address is blocked, false otherwise
+     */
+    function isBlockedAddress(address addr) public view returns (bool) {
+        return _isBlockedAddress[addr] > 0;
+    }
+
+    /**
      * @notice Returns the list of all currently blocked addresses
      * @return Array of blocked addresses
      */
@@ -135,9 +145,9 @@ contract TransactionBlocker is AccessControl {
      */
     function _addBlockedAddress(address addr) internal {
         if (addr == address(0)) revert NullAddress();
-        if (isBlockedAddress[addr]) revert AlreadyBlocked();
-        isBlockedAddress[addr] = true;
+        if (isBlockedAddress(addr)) revert AlreadyBlocked();
         blockedAddresses.push(addr);
+        _isBlockedAddress[addr] = blockedAddresses.length;
         emit BlockedAddressAdded(addr);
     }
 
@@ -149,15 +159,15 @@ contract TransactionBlocker is AccessControl {
      */
     function _removeBlockedAddress(address addr) internal {
         if (addr == address(0)) revert NullAddress();
-        if (!isBlockedAddress[addr]) revert NotBlocked();
-        delete isBlockedAddress[addr];
-        for (uint256 i = 0; i < blockedAddresses.length; ++i) {
-            if (blockedAddresses[i] == addr) {
-                blockedAddresses[i] = blockedAddresses[blockedAddresses.length - 1];
-                break;
-            }
-        }
+        if (!isBlockedAddress(addr)) revert NotBlocked();
+
+        // Swap the target address with the last address
+        uint256 arrayIndex = _isBlockedAddress[addr] - 1;
+        address last = blockedAddresses[blockedAddresses.length - 1];
+        blockedAddresses[arrayIndex] = last;
+        _isBlockedAddress[last] = arrayIndex + 1;
         blockedAddresses.pop();
+        delete _isBlockedAddress[addr];
         emit BlockedAddressRemoved(addr);
     }
 }
