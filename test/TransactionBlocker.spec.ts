@@ -118,20 +118,20 @@ describe('TransactionBlocker', () => {
     it('should revert when blocking zero address', async () => {
       await expect(
         transactionBlocker.connect(operator).blockAddress(zeroAddress)
-      ).to.be.revertedWithCustomError(factory, 'NullAddress')
+      ).to.be.revertedWithCustomError(transactionBlocker, 'NullAddress')
     })
 
     it('should revert when blocking already blocked address', async () => {
       await transactionBlocker.connect(operator).blockAddress(user1.address)
       await expect(
         transactionBlocker.connect(operator).blockAddress(user1.address)
-      ).to.be.revertedWithCustomError(factory, 'AlreadyBlocked')
+      ).to.be.revertedWithCustomError(transactionBlocker, 'AlreadyBlocked')
     })
 
     it('should revert when called by non-operator', async () => {
       await expect(
         transactionBlocker.connect(user1).blockAddress(user2.address)
-      ).to.be.revertedWithCustomError(factory, 'UnauthorizedSender')
+      ).to.be.revertedWithCustomError(transactionBlocker, 'UnauthorizedSender')
     })
   })
 
