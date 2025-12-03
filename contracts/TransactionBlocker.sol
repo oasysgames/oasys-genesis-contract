@@ -23,12 +23,18 @@ contract TransactionBlocker is AccessControl {
     /// @notice Role identifier for operators who can manage blocked addresses
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
+    // Slot number is `0`.
+    // Defined in the @openzeppelin/contracts/access/AccessControl.sol
+    // mapping(bytes32 => RoleData) private _roles;
+
     /// @notice Global flag indicating whether all transactions are blocked
+    /// @dev Slot number is `1`. Don't change. Hardcoded in the oasys-validator side.
     bool public isBlockedAll;
 
     /// @notice Mapping to track which addresses are blocked (both from/to directions)
     /// @notice The value is the index + 1 of the address in the blockedAddresses array
     /// @notice If the address is not blocked, the value is 0
+    /// @dev Slot number is `2`. Don't change. Hardcoded in the oasys-validator side.
     mapping(address => uint256) private _isBlockedAddress;
 
     /// @notice Array of all currently blocked addresses
