@@ -161,15 +161,18 @@ contract TransactionBlocker is AccessControl {
         if (addr == address(0)) revert NullAddress();
         if (!isBlockedAddress(addr)) revert NotBlocked();
 
-        // Swap the target address with the last address, unless it's already the last
         uint256 arrayIndex = _isBlockedAddress[addr] - 1;
         address last = blockedAddresses[blockedAddresses.length - 1];
-        if (arrayIndex != blockedAddresses.length - 1) {
+
+        blockedAddresses.pop();
+        delete _isBlockedAddress[addr];
+
+        // Swap the target address with the last address, unless it's already the last
+        if (last != addr) {
             blockedAddresses[arrayIndex] = last;
             _isBlockedAddress[last] = arrayIndex + 1;
         }
-        blockedAddresses.pop();
-        delete _isBlockedAddress[addr];
+
         emit BlockedAddressRemoved(addr);
     }
 }
