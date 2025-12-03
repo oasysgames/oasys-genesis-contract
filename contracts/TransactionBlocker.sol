@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.12;
 
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 import { NullAddress, UnauthorizedSender } from "./lib/Errors.sol";
 
 /**
