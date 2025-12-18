@@ -181,7 +181,12 @@ describe('StakeManager', () => {
     expect(actualSOAS).to.match(new RegExp(`^${expectSOAS}`))
   }
 
+  const allowAddress = async (validator: Validator) => {
+    await allowlist.connect(deployer).addAddress(validator.owner.address, { gasPrice })
+  }
+
   const initializeValidators = async () => {
+    await Promise.all(validators.map((x) => allowAddress(x)))
     await Promise.all(validators.map((x) => x.joinValidator()))
     await fixedValidator.stake(Token.OAS, fixedValidator, '500')
   }
@@ -375,10 +380,14 @@ describe('StakeManager', () => {
 
       beforeEach(async () => {
         attackerv = new Validator(stakeManager, attacker, operator)
-
+        await allowAddress(validator)
         await expect(await validator.joinValidator())
           .to.emit(stakeManager, 'ValidatorJoined')
           .withArgs(validator.owner.address)
+      })
+
+      it('should revert when validator is not in allowlist', async () => {
+        await expect(attackerv.joinValidator()).to.revertedWith('UnauthorizedValidator()')
       })
 
       it('should revert when already joined', async () => {
@@ -387,16 +396,19 @@ describe('StakeManager', () => {
       })
 
       it('should revert when operator address is zero', async () => {
+        await allowAddress(attackerv)
         const tx = attackerv.joinValidator(zeroAddress)
         await expect(tx).to.revertedWith('EmptyAddress()')
       })
 
       it('should revert when operator address asme as owner address', async () => {
+        await allowAddress(attackerv)
         const tx = attackerv.joinValidator(attacker.address)
         await expect(tx).to.revertedWith('SameAsOwner()')
       })
 
       it('should revert when operator address is already in use', async () => {
+        await allowAddress(attackerv)
         const tx = attackerv.joinValidator(operator.address)
         await expect(tx).to.revertedWith('AlreadyInUse()')
       })
@@ -405,6 +417,7 @@ describe('StakeManager', () => {
     it('updateOperator()', async () => {
       const newOperator = accounts[accounts.length - 3]
 
+      await allowAddress(validator)
       await validator.joinValidator()
 
       let tx = validator.updateOperator(zeroAddress)
@@ -432,6 +445,7 @@ describe('StakeManager', () => {
       const ethPrivKey = '0xd1c71e71b06e248c8dbe94d49ef6d6b0d64f5d71b1e33a0f39e14dadb070304a'
       const newBLSPubKey =
         '0x16e08cfa832b113a1c9042b3579fc9000973417fb2295568396ffe74e6445457278382ab121d513f4a0ecf22144d2c93'
+      await allowAddress(validator)
       await validator.joinValidator()
 
       // invalid length
@@ -458,6 +472,7 @@ describe('StakeManager', () => {
 
       // fail: already registered BLS public key
       const validator2 = new Validator(stakeManager, accounts[1], accounts[2])
+      await allowAddress(validator2)
       await validator2.joinValidator()
       tx = validator2.updateBLSPublicKey(blsPubKey)
       await expect(tx).to.revertedWith('AlreadyInUse()')
@@ -470,6 +485,7 @@ describe('StakeManager', () => {
     })
 
     it('deactivateValidator() and activateValidator()', async () => {
+      await allowAddress(validator)
       await validator.joinValidator()
       await staker1.stake(Token.OAS, validator, '500')
 
@@ -580,6 +596,7 @@ describe('StakeManager', () => {
     })
 
     it('claimCommissions()', async () => {
+      await allowAddress(validator)
       await validator.joinValidator()
       await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 50 })
 
@@ -604,6 +621,7 @@ describe('StakeManager', () => {
     })
 
     it('restakeCommissions()', async () => {
+      await allowAddress(validator)
       await validator.joinValidator()
       await updateEnvironment({ startEpoch: await getEpoch(1), commissionRate: 10 })
       await toNextEpoch()
@@ -658,6 +676,7 @@ describe('StakeManager', () => {
         epoch = await getEpoch()
         until = period + epoch
 
+        await allowAddress(validator)
         await validator.joinValidator()
         await validator.updateBLSPublicKey(blsPubKey)
       })
