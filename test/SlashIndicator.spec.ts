@@ -4,6 +4,7 @@ import { toWei } from 'web3-utils'
 import { expect } from 'chai'
 
 import type { Environment, StakeManager, SlashIndicator } from '../typechain-types/contracts'
+import type { Allowlist } from '../typechain-types/contracts/lib'
 import type { PrecompileBLSVerify, PrecompileDoubleSign } from '../typechain-types/contracts/test'
 import type { ISlashIndicator } from '../typechain-types/contracts/SlashIndicator'
 
@@ -44,6 +45,7 @@ describe('SlashIndicator', () => {
   let validator: Validator
 
   let stakeManager: StakeManager
+  let allowlist: Allowlist
   let environment: Environment
   let slashIndicator: SlashIndicator
   let precompileBLSVerify: PrecompileBLSVerify
@@ -77,6 +79,12 @@ describe('SlashIndicator', () => {
     await environment.initialize(initialEnv, { gasPrice })
   })
 
+  // deploy the Allowlist contract
+  beforeEach(async () => {
+    const factory = await ethers.getContractFactory('Allowlist')
+    allowlist = await factory.connect(deployer).deploy()
+  })
+
   // deploy the StakeManager contract
   beforeEach(async () => {
     const factory = await ethers.getContractFactory('StakeManager')
@@ -94,6 +102,7 @@ describe('SlashIndicator', () => {
     const pad = (s: string, len = 32) => ethers.utils.hexZeroPad(s, len)
     const storages = [
       ['0x0', pad(environment.address, 31) + '01'], // combined value of the `bool public initialized`
+      ['0x1', pad(allowlist.address, 32)],
       [ethers.utils.keccak256(pad(slashIndicator.address) + pad('0x' + Number(11).toString(16)).slice(2)), pad('0x1')],
     ]
 
@@ -106,6 +115,7 @@ describe('SlashIndicator', () => {
 
   beforeEach(async () => {
     validator = new Validator(stakeManager, owner, operator)
+    await allowlist.connect(deployer).addAddress(validator.owner.address)
     await validator.joinValidator()
     await validator.updateBLSPublicKey(blsPubKey)
   })
