@@ -224,6 +224,10 @@ contract StakeManager is IStakeManager, System {
      */
     function joinValidator(address operator) external {
         address owner = msg.sender;
+        // Restore the original whitelist check to bridge Oasys back from a public to a permissioned chain
+        if (!allowlist.containsAddress(owner)) {
+            revert UnauthorizedValidator();
+        }
 
         if (operatorToOwner[operator] != address(0)) {
             revert AlreadyInUse();
